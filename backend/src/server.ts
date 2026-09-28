@@ -210,6 +210,80 @@ const start = async () => {
               send({ type: 'navigated', url: page!.url() });
               break;
 
+            case 'enable_picker':
+              await page!.exposeFunction('__netHarvestPick', (selector: string) => {
+                send({ type: 'picked_selector', selector });
+              }).catch(() => {}); // catch in case already exposed
+              
+              await page!.evaluate(() => {
+                if ((window as any).__pickerActive) return;
+                (window as any).__pickerActive = true;
+                
+                const overlay = document.createElement('div');
+                Object.assign(overlay.style, {
+                  position: 'fixed', top: '0', left: '0', width: '0', height: '0',
+                  background: 'rgba(59,130,246,0.3)', border: '2px solid #3b82f6',
+                  pointerEvents: 'none', zIndex: '999999', transition: 'all 0.1s'
+                });
+                document.body.appendChild(overlay);
+
+                const moveHandler = (e: MouseEvent) => {
+                  const target = e.target as HTMLElement;
+                  if (!target) return;
+                  const rect = target.getBoundingClientRect();
+                  overlay.style.top = rect.top + 'px';
+                  overlay.style.left = rect.left + 'px';
+                  overlay.style.width = rect.width + 'px';
+                  overlay.style.height = rect.height + 'px';
+                };
+
+                const getPath = (el: any): string => {
+                  if (el.id) return '#' + CSS.escape(el.id);
+                  if (el === document.body) return 'body';
+                  let path = '';
+                  while (el && el !== document.body) {
+                    if (el.id) {
+                      path = '#' + CSS.escape(el.id) + (path ? ' > ' + path : '');
+                      break;
+                    }
+                    let selector = el.tagName.toLowerCase();
+                    if (el.className && typeof el.className === 'string') {
+                      const classes = el.className.trim().split(/\s+/).filter((c: string) => c).map(CSS.escape);
+                      if (classes.length > 0) selector += '.' + classes.join('.');
+                    }
+                    let siblingIndex = 1;
+                    let sibling = el.previousElementSibling;
+                    while (sibling) {
+                      siblingIndex++;
+                      sibling = sibling.previousElementSibling;
+                    }
+                    selector += `:nth-child(${siblingIndex})`;
+                    path = selector + (path ? ' > ' + path : '');
+                    el = el.parentElement;
+                  }
+                  return path;
+                };
+
+                const clickHandler = (e: MouseEvent) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.stopImmediatePropagation();
+                  const target = e.target as Element;
+                  const selector = getPath(target);
+                  
+                  document.removeEventListener('mousemove', moveHandler, true);
+                  document.removeEventListener('click', clickHandler, true);
+                  document.body.removeChild(overlay);
+                  (window as any).__pickerActive = false;
+                  
+                  (window as any).__netHarvestPick(selector);
+                };
+
+                document.addEventListener('mousemove', moveHandler, true);
+                document.addEventListener('click', clickHandler, true);
+              }).catch(() => {});
+              break;
+
             case 'click': {
               const vp = page!.viewportSize() ?? { width: 1280, height: 720 };
               await page!.mouse.click(

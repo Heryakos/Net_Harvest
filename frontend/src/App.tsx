@@ -45,6 +45,7 @@ export default function App() {
   const [maxPages, setMaxPages] = useState(1);
   const [sameOriginOnly, setSameOriginOnly] = useState(true);
   const [targetSelector, setTargetSelector] = useState('');
+  const [isPicking, setIsPicking] = useState(false);
   const [browserTab, setBrowserTab] = useState<BrowserTab>('interactive');
   const [jobStatus, setJobStatus] = useState('');
   const [downloadReady, setDownloadReady] = useState(false);
@@ -168,9 +169,13 @@ export default function App() {
       else if (msg.type === 'resources') setSessionResources(msg.resources);
       else if (msg.type === 'navigated') setNavUrl(msg.url);
       else if (msg.type === 'loading') setBrowserFrame(null);
+      else if (msg.type === 'picked_selector') {
+        setTargetSelector(msg.selector);
+        setIsPicking(false);
+      }
     };
-    ws.onclose = () => { setWsConnected(false); setBrowserFrame(null); setWsLoading(false); };
-    ws.onerror = () => { setWsLoading(false); setWsConnected(false); alert('Interactive browser failed to connect. Make sure the backend (npm run dev) is running.'); };
+    ws.onclose = () => { setWsConnected(false); setBrowserFrame(null); setWsLoading(false); setIsPicking(false); };
+    ws.onerror = () => { setWsLoading(false); setWsConnected(false); setIsPicking(false); alert('Interactive browser failed to connect. Make sure the backend (npm run dev) is running.'); };
   }, [targetUrl]);
 
   const disconnectBrowser = () => { wsRef.current?.close(); setWsConnected(false); setBrowserFrame(null); };
@@ -265,13 +270,20 @@ export default function App() {
               <input className="input-glass" value={targetUrl} onChange={e => { setTargetUrl(e.target.value); setDetected(null); }}
                 placeholder="https://example.com" style={{ marginBottom: '16px' }} />
 
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
-                🎯 Target Specific Section (Optional)
+              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span>🎯 Target Specific Section (Optional)</span>
+                {wsConnected && (
+                  <button onClick={() => { setIsPicking(true); sendWs({ type: 'enable_picker' }); }} style={{
+                    background: isPicking ? 'rgba(59,130,246,0.6)' : 'rgba(59,130,246,0.2)', color: 'white', border: 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer'
+                  }}>
+                    {isPicking ? '👆 Click an element in browser...' : '🎯 Pick from Browser'}
+                  </button>
+                )}
               </label>
               <input className="input-glass" value={targetSelector} onChange={e => setTargetSelector(e.target.value)}
                 placeholder="e.g. .card-container or #gallery" style={{ marginBottom: '20px' }} />
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '20px' }}>
-                Only scroll and extract images/media from this specific CSS selector instead of the whole page.
+                {isPicking ? <span style={{ color: '#60a5fa' }}>Hover over the interactive browser on the right and click the container you want.</span> : 'Only scroll and extract images/media from this specific CSS selector instead of the whole page.'}
               </p>
 
               {/* Multi-page crawl */}
@@ -537,8 +549,8 @@ export default function App() {
                 tabIndex={0} onKeyDown={e => { e.preventDefault(); sendWs({ type: 'key', key: e.key }); }}
                 style={{
                   flex: 1, background: 'rgba(0,0,0,0.3)', borderRadius: '10px',
-                  border: wsConnected ? '2px solid rgba(59,130,246,0.4)' : '1px solid rgba(255,255,255,0.08)',
-                  overflow: 'hidden', cursor: wsConnected ? 'crosshair' : 'default',
+                  border: wsConnected ? (isPicking ? '2px solid #4ade80' : '2px solid rgba(59,130,246,0.4)') : '1px solid rgba(255,255,255,0.08)',
+                  overflow: 'hidden', cursor: wsConnected ? (isPicking ? 'crosshair' : 'default') : 'default',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   minHeight: '480px', outline: 'none', position: 'relative'
                 }}>
