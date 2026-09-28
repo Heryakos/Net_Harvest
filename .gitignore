@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Downloaded resources (generated at runtime)
+backend/data/
+backend/downloads/
+backend/test.zip
+backend/test_download*.zip
+backend/portfolio_download.zip
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Playwright browser binaries (user installs these)
+**/playwright/.local-browsers/
