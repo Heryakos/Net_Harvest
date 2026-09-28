@@ -168,6 +168,9 @@ const start = async () => {
         });
         page = await context.newPage();
 
+        page.on('console', msg => console.log(`[Browser Console] ${msg.type()}: ${msg.text()}`));
+        page.on('pageerror', err => console.error(`[Browser Error] ${err.message}`));
+
         // Handle new tabs (target="_blank") so they don't open invisibly in the background
         page.on('popup', async (popup) => {
           const popupUrl = popup.url();
@@ -191,7 +194,10 @@ const start = async () => {
 
       socket.on('message', async (raw: Buffer) => {
         let msg: any;
-        try { msg = JSON.parse(raw.toString()); } catch { return; }
+        try { 
+          msg = JSON.parse(raw.toString()); 
+          if (msg.type !== 'mousemove') console.log('[WS IN]', msg);
+        } catch { return; }
 
         if (!page && msg.type !== 'start') {
           send({ type: 'error', message: 'Send { type: "start", url: "..." } first.' });
@@ -210,34 +216,12 @@ const start = async () => {
               send({ type: 'navigated', url: page!.url() });
               break;
 
-            case 'enable_picker':
-              await page!.exposeFunction('__netHarvestPick', (selector: string) => {
-                send({ type: 'picked_selector', selector });
-              }).catch(() => {}); // catch in case already exposed
+            case 'pick_element': {
+              const vp = page!.viewportSize() ?? { width: 1280, height: 720 };
+              const px = (msg.x / 100) * vp.width;
+              const py = (msg.y / 100) * vp.height;
               
-              await page!.evaluate(() => {
-                if ((window as any).__pickerActive) return;
-                (window as any).__pickerActive = true;
-                
-                const overlay = document.createElement('div');
-                overlay.id = 'netHarvestOverlay';
-                Object.assign(overlay.style, {
-                  position: 'fixed', top: '0', left: '0', width: '0', height: '0',
-                  background: 'rgba(59,130,246,0.3)', border: '2px solid #3b82f6',
-                  pointerEvents: 'none', zIndex: '999999', transition: 'all 0.1s'
-                });
-                document.body.appendChild(overlay);
-
-                const moveHandler = (e: MouseEvent) => {
-                  const target = e.target as HTMLElement;
-                  if (!target) return;
-                  const rect = target.getBoundingClientRect();
-                  overlay.style.top = rect.top + 'px';
-                  overlay.style.left = rect.left + 'px';
-                  overlay.style.width = rect.width + 'px';
-                  overlay.style.height = rect.height + 'px';
-                };
-
+              const selector = await page!.evaluate(({ x, y }) => {
                 const getPath = (el: any): string => {
                   try {
                     if (el.id) return '#' + CSS.escape(el.id);
@@ -269,57 +253,66 @@ const start = async () => {
                   }
                 };
 
-                const clickHandler = (e: MouseEvent) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.stopImmediatePropagation();
-                  const target = e.target as Element;
-                  const selector = getPath(target);
-                  
-                  document.removeEventListener('mousemove', moveHandler, true);
-                  document.removeEventListener('click', clickHandler, true);
-                  document.body.removeChild(overlay);
-                  (window as any).__pickerActive = false;
-                  
-                  (window as any).__netHarvestPick(selector);
-                };
-
-                (window as any).__pickerMoveHandler = moveHandler;
-                (window as any).__pickerClickHandler = clickHandler;
-
-                document.addEventListener('mousemove', moveHandler, true);
-                document.addEventListener('click', clickHandler, true);
-              }).catch(() => {});
-              break;
-
-            case 'disable_picker':
-              await page!.evaluate(() => {
-                if (!(window as any).__pickerActive) return;
-                
-                if ((window as any).__pickerMoveHandler) {
-                  document.removeEventListener('mousemove', (window as any).__pickerMoveHandler, true);
-                }
-                if ((window as any).__pickerClickHandler) {
-                  document.removeEventListener('click', (window as any).__pickerClickHandler, true);
-                }
+                // Clear highlight first so it doesn't pick the highlight overlay
                 const overlay = document.getElementById('netHarvestOverlay');
-                if (overlay) document.body.removeChild(overlay);
-                (window as any).__pickerActive = false;
-              }).catch(() => {});
-              break;
-
-            case 'click': {
-              const vp = page!.viewportSize() ?? { width: 1280, height: 720 };
-              await page!.mouse.click(
-                (msg.x / 100) * vp.width,
-                (msg.y / 100) * vp.height
-              );
+                if (overlay) overlay.style.pointerEvents = 'none'; // Ensure it's not pickable
+                
+                const target = document.elementFromPoint(x, y);
+                if (overlay) document.body.removeChild(overlay); // Clean up
+                
+                if (!target) return 'body';
+                return getPath(target);
+              }, { x: px, y: py }).catch(() => 'body');
+              
+              send({ type: 'picked_selector', selector });
               break;
             }
 
-            case 'mousemove': {
+            case 'highlight_element': {
               const vp = page!.viewportSize() ?? { width: 1280, height: 720 };
-              await page!.mouse.move(
+              const px = (msg.x / 100) * vp.width;
+              const py = (msg.y / 100) * vp.height;
+
+              await page!.evaluate(({ x, y }) => {
+                let overlay = document.getElementById('netHarvestOverlay');
+                if (!overlay) {
+                  overlay = document.createElement('div');
+                  overlay.id = 'netHarvestOverlay';
+                  Object.assign(overlay.style, {
+                    position: 'fixed', top: '0', left: '0', width: '0', height: '0',
+                    background: 'rgba(59,130,246,0.3)', border: '2px solid #3b82f6',
+                    pointerEvents: 'none', zIndex: '999999', transition: 'all 0.05s'
+                  });
+                  document.body.appendChild(overlay);
+                } else {
+                  overlay.style.pointerEvents = 'none'; // Ensure not pickable temporarily
+                }
+                
+                // Hide overlay temporarily to find element underneath
+                overlay.style.display = 'none';
+                const target = document.elementFromPoint(x, y);
+                overlay.style.display = 'block';
+
+                if (target) {
+                  const rect = target.getBoundingClientRect();
+                  overlay.style.top = rect.top + 'px';
+                  overlay.style.left = rect.left + 'px';
+                  overlay.style.width = rect.width + 'px';
+                  overlay.style.height = rect.height + 'px';
+                }
+              }, { x: px, y: py }).catch(() => {});
+              break;
+            }
+
+            case 'clear_highlight':
+              await page!.evaluate(() => {
+                const overlay = document.getElementById('netHarvestOverlay');
+                if (overlay) document.body.removeChild(overlay);
+              }).catch(() => {});
+              break;
+            case 'click': {
+              const vp = page!.viewportSize() ?? { width: 1280, height: 720 };
+              await page!.mouse.click(
                 (msg.x / 100) * vp.width,
                 (msg.y / 100) * vp.height
               );

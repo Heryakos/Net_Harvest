@@ -218,13 +218,17 @@ export default function App() {
     const xPct = (clickX / renderWidth) * 100;
     const yPct = (clickY / renderHeight) * 100;
 
-    sendWs({ type: 'click', x: xPct, y: yPct });
+    if (isPicking) {
+      sendWs({ type: 'pick_element', x: xPct, y: yPct });
+    } else {
+      sendWs({ type: 'click', x: xPct, y: yPct });
+    }
   };
 
   const handleImgMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isPicking) return; // Only forward mouse moves when picking to save bandwidth
+    if (!isPicking) return; // Only forward mouse moves when picking
     const now = Date.now();
-    if (now - lastMouseMoveRef.current < 100) return; // Throttle to max 10fps
+    if (now - lastMouseMoveRef.current < 100) return; // Throttle to 10fps
     lastMouseMoveRef.current = now;
 
     const rect = e.currentTarget.getBoundingClientRect();
@@ -253,7 +257,7 @@ export default function App() {
     const xPct = (moveX / renderWidth) * 100;
     const yPct = (moveY / renderHeight) * 100;
 
-    sendWs({ type: 'mousemove', x: xPct, y: yPct });
+    sendWs({ type: 'highlight_element', x: xPct, y: yPct });
   };
 
   const handleScroll = (e: React.WheelEvent) => {
@@ -312,10 +316,9 @@ export default function App() {
                   <button onClick={() => { 
                     if (isPicking) {
                       setIsPicking(false);
-                      sendWs({ type: 'disable_picker' });
+                      sendWs({ type: 'clear_highlight' });
                     } else {
                       setIsPicking(true);
-                      sendWs({ type: 'enable_picker' });
                     }
                   }} style={{
                     background: isPicking ? 'rgba(239,68,68,0.3)' : 'rgba(59,130,246,0.2)', color: 'white', border: isPicking ? '1px solid rgba(239,68,68,0.5)' : 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer'
