@@ -15,6 +15,8 @@ export interface CrawlOptions {
   sameOriginOnly?: boolean;
   /** Max concurrent page loads (default: 3) */
   concurrency?: number;
+  /** CSS selector of a specific element to scroll and extract from (e.g. .card-container) */
+  targetSelector?: string;
   /** Called each time a new page is visited */
   onPageVisit?: (visited: number, total: number, url: string) => void;
 }
@@ -47,6 +49,7 @@ export class Extractor {
       maxPages = 1,
       sameOriginOnly = true,
       concurrency = Math.min(3, maxPages),
+      targetSelector,
       onPageVisit
     } = options;
 
@@ -80,25 +83,30 @@ export class Extractor {
         await page.waitForTimeout(waitTimeMs);
 
         // Auto-scroll to trigger lazy-loaded content and infinite scrolls
-        await page.evaluate(async () => {
+        await page.evaluate(async (selector) => {
           await new Promise<void>(resolve => {
-            let lastHeight = document.body.scrollHeight;
+            const scroller = selector ? document.querySelector(selector) : (document.scrollingElement || document.body);
+            if (!scroller) return resolve();
+
+            let lastHeight = scroller.scrollHeight;
             let unchangedCount = 0;
             const distance = 600;
             const maxScrolls = 100; // Limit to prevent getting stuck forever
             let scrollCount = 0;
 
             const interval = setInterval(() => {
-              window.scrollBy(0, distance);
+              scroller.scrollBy(0, distance);
+              // Also scroll window just in case
+              if (selector) window.scrollBy(0, distance); 
               scrollCount++;
               
-              const newHeight = document.body.scrollHeight;
+              const newHeight = scroller.scrollHeight;
               if (newHeight === lastHeight) {
                 unchangedCount++;
                 // If height hasn't changed for 1.5 seconds (6 ticks of 250ms), we're done
                 if (unchangedCount >= 6 || scrollCount >= maxScrolls) {
                   clearInterval(interval);
-                  window.scrollTo(0, 0);
+                  scroller.scrollTo(0, 0);
                   resolve();
                 }
               } else {
@@ -107,9 +115,33 @@ export class Extractor {
               }
             }, 250); // 250ms allows time for network fetches and DOM updates
           });
-        }).catch(() => {});
+        }, targetSelector).catch(() => {});
 
         await page.waitForTimeout(800);
+
+        // If a targetSelector is provided, harvest URLs explicitly from its DOM
+        if (targetSelector) {
+          const domUrls = await page.evaluate((selector) => {
+            const el = document.querySelector(selector);
+            if (!el) return [];
+            const urls: string[] = [];
+            el.querySelectorAll<HTMLImageElement>('img').forEach(img => urls.push(img.src));
+            el.querySelectorAll<HTMLVideoElement>('video, source').forEach(v => urls.push(v.src));
+            el.querySelectorAll<HTMLAnchorElement>('a').forEach(a => urls.push(a.href));
+            el.querySelectorAll('*').forEach(child => {
+              const bg = window.getComputedStyle(child).backgroundImage;
+              if (bg && bg !== 'none') {
+                const match = bg.match(/url\(['"]?(.*?)['"]?\)/);
+                if (match) urls.push(match[1]);
+              }
+            });
+            return urls.filter(Boolean);
+          }, targetSelector).catch(() => []);
+
+          domUrls.forEach(u => {
+            if (u.startsWith('http')) resourceUrls.add(u);
+          });
+        }
 
         // Collect links for further crawling
         if (maxPages > 1) {

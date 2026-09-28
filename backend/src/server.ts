@@ -19,13 +19,14 @@ fastify.get('/ping', async () => ({ status: 'ok' }));
 fastify.get('/api/jobs', async () => JobModel.getAllJobs());
 
 fastify.post('/api/jobs', async (request, reply) => {
-  const { startUrl, filters, maxPages, sameOriginOnly } = request.body as any;
+  const { startUrl, filters, maxPages, sameOriginOnly, targetSelector } = request.body as any;
   if (!startUrl) return reply.status(400).send({ error: 'startUrl is required' });
   const jobId = randomUUID();
   const job = JobModel.createJob(jobId, startUrl);
   JobRunner.startJob(jobId, startUrl, filters || [], {
     maxPages: Math.min(Number(maxPages) || 1, 1000),
-    sameOriginOnly: sameOriginOnly !== false
+    sameOriginOnly: sameOriginOnly !== false,
+    targetSelector
   });
   return reply.status(201).send(job);
 });
@@ -47,14 +48,15 @@ fastify.get('/api/jobs/:id/download', async (request, reply) => {
 
 // ─── Live filter preview ──────────────────────────────────────────────────────
 fastify.post('/api/preview', async (request, reply) => {
-  const { url, filters, maxPages } = request.body as {
-    url: string; filters: FilterRule[]; maxPages?: number;
+  const { url, filters, maxPages, targetSelector } = request.body as {
+    url: string; filters: FilterRule[]; maxPages?: number; targetSelector?: string;
   };
   if (!url) return reply.status(400).send({ error: 'url required' });
   try {
     const extractor = new Extractor();
     const rawUrls = await extractor.extractNetwork(url, 3000, {
-      maxPages: Math.min(Number(maxPages) || 1, 5)   // cap preview at 5 pages
+      maxPages: Math.min(Number(maxPages) || 1, 5),   // cap preview at 5 pages
+      targetSelector
     });
     const filterEngine = new URLFilter(filters || []);
     const allowed = rawUrls.filter(u => filterEngine.isAllowed(u));

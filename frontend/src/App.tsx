@@ -44,6 +44,7 @@ export default function App() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [maxPages, setMaxPages] = useState(1);
   const [sameOriginOnly, setSameOriginOnly] = useState(true);
+  const [targetSelector, setTargetSelector] = useState('');
   const [browserTab, setBrowserTab] = useState<BrowserTab>('interactive');
   const [jobStatus, setJobStatus] = useState('');
   const [downloadReady, setDownloadReady] = useState(false);
@@ -121,7 +122,7 @@ export default function App() {
     try {
       const res = await fetch('http://localhost:3000/api/preview', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: targetUrl, filters, maxPages: Math.min(maxPages, 5) })
+        body: JSON.stringify({ url: targetUrl, filters, maxPages: Math.min(maxPages, 5), targetSelector: targetSelector.trim() || undefined })
       });
       const data = await res.json();
       if (data.error) alert(data.error); else setPreview(data);
@@ -134,7 +135,7 @@ export default function App() {
     try {
       const res = await fetch('http://localhost:3000/api/jobs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ startUrl: targetUrl, filters, maxPages, sameOriginOnly })
+        body: JSON.stringify({ startUrl: targetUrl, filters, maxPages, sameOriginOnly, targetSelector: targetSelector.trim() || undefined })
       });
       const data = await res.json();
       setActiveJobId(data.id);
@@ -262,7 +263,16 @@ export default function App() {
 
               <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>🌐 Target URL</label>
               <input className="input-glass" value={targetUrl} onChange={e => { setTargetUrl(e.target.value); setDetected(null); }}
-                placeholder="https://example.com" style={{ marginBottom: '20px' }} />
+                placeholder="https://example.com" style={{ marginBottom: '16px' }} />
+
+              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+                🎯 Target Specific Section (Optional)
+              </label>
+              <input className="input-glass" value={targetSelector} onChange={e => setTargetSelector(e.target.value)}
+                placeholder="e.g. .card-container or #gallery" style={{ marginBottom: '20px' }} />
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '20px' }}>
+                Only scroll and extract images/media from this specific CSS selector instead of the whole page.
+              </p>
 
               {/* Multi-page crawl */}
               <div style={{ padding: '16px', background: 'rgba(59,130,246,0.06)', borderRadius: '10px', border: '1px solid rgba(59,130,246,0.2)', marginBottom: '16px' }}>
