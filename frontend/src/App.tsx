@@ -180,7 +180,38 @@ export default function App() {
 
   const handleImgClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    sendWs({ type: 'click', x: ((e.clientX - rect.left) / rect.width) * 100, y: ((e.clientY - rect.top) / rect.height) * 100 });
+    
+    // Playwright viewport is 1280x720
+    const imgRatio = 1280 / 720;
+    const containerRatio = rect.width / rect.height;
+
+    let renderWidth = rect.width;
+    let renderHeight = rect.height;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (containerRatio > imgRatio) {
+      // Container is wider than the image (pillarboxing - black bars on left/right)
+      renderWidth = rect.height * imgRatio;
+      offsetX = (rect.width - renderWidth) / 2;
+    } else {
+      // Container is taller than the image (letterboxing - black bars on top/bottom)
+      renderHeight = rect.width / imgRatio;
+      offsetY = (rect.height - renderHeight) / 2;
+    }
+
+    const clickX = e.clientX - rect.left - offsetX;
+    const clickY = e.clientY - rect.top - offsetY;
+
+    // Ignore clicks outside the actual image area (on the black bars)
+    if (clickX < 0 || clickX > renderWidth || clickY < 0 || clickY > renderHeight) {
+      return;
+    }
+
+    const xPct = (clickX / renderWidth) * 100;
+    const yPct = (clickY / renderHeight) * 100;
+
+    sendWs({ type: 'click', x: xPct, y: yPct });
   };
 
   const handleScroll = (e: React.WheelEvent) => {

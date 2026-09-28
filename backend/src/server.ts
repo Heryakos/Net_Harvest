@@ -166,6 +166,15 @@ const start = async () => {
         });
         page = await context.newPage();
 
+        // Handle new tabs (target="_blank") so they don't open invisibly in the background
+        page.on('popup', async (popup) => {
+          const popupUrl = popup.url();
+          // Navigate the main page to the new URL and close the invisible popup
+          await page!.goto(popupUrl, { waitUntil: 'load', timeout: 15000 }).catch(() => {});
+          send({ type: 'navigated', url: page!.url() });
+          await popup.close().catch(() => {});
+        });
+
         page.on('response', response => {
           const u = response.url();
           if (u.startsWith('http')) sessionResources.add(u);
