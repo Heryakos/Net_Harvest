@@ -625,22 +625,7 @@ export default function App() {
                 )}
               </div>
 
-              {/* Captured resources */}
-              {sessionResources.length > 0 && (
-                <div style={{ marginTop: '10px', padding: '10px 14px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: '#60a5fa' }}>📡 {sessionResources.length} resources captured in this session</span>
-                    <button onClick={() => setStep(2)} style={{ padding: '4px 10px', background: 'rgba(59,130,246,0.3)', border: '1px solid rgba(59,130,246,0.5)', color: 'white', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem' }}>
-                      → Set Filters
-                    </button>
-                  </div>
-                  <div style={{ maxHeight: '80px', overflowY: 'auto', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    {sessionResources.slice(0, 15).map((u, i) => <div key={i} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '2px' }}>{u}</div>)}
-                    {sessionResources.length > 15 && <div style={{ color: '#60a5fa' }}>...and {sessionResources.length - 15} more</div>}
-                  </div>
-                </div>
-              )}
-            </div>
+              </div>
           )}
 
           {/* PREVIEW TAB */}
