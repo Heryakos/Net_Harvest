@@ -220,6 +220,37 @@ export default function App() {
     sendWs({ type: 'click', x: xPct, y: yPct });
   };
 
+  const handleImgMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isPicking) return; // Only forward mouse moves when picking to save bandwidth
+    const rect = e.currentTarget.getBoundingClientRect();
+    
+    const imgRatio = 1280 / 720;
+    const containerRatio = rect.width / rect.height;
+
+    let renderWidth = rect.width;
+    let renderHeight = rect.height;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (containerRatio > imgRatio) {
+      renderWidth = rect.height * imgRatio;
+      offsetX = (rect.width - renderWidth) / 2;
+    } else {
+      renderHeight = rect.width / imgRatio;
+      offsetY = (rect.height - renderHeight) / 2;
+    }
+
+    const moveX = e.clientX - rect.left - offsetX;
+    const moveY = e.clientY - rect.top - offsetY;
+
+    if (moveX < 0 || moveX > renderWidth || moveY < 0 || moveY > renderHeight) return;
+
+    const xPct = (moveX / renderWidth) * 100;
+    const yPct = (moveY / renderHeight) * 100;
+
+    sendWs({ type: 'mousemove', x: xPct, y: yPct });
+  };
+
   const handleScroll = (e: React.WheelEvent) => {
     sendWs({ type: 'scroll', deltaY: e.deltaY });
   };
@@ -545,7 +576,7 @@ export default function App() {
               )}
 
               {/* Viewport */}
-              <div ref={imgRef} onClick={handleImgClick} onWheel={handleScroll}
+              <div ref={imgRef} onClick={handleImgClick} onMouseMove={handleImgMouseMove} onWheel={handleScroll}
                 tabIndex={0} onKeyDown={e => { e.preventDefault(); sendWs({ type: 'key', key: e.key }); }}
                 style={{
                   flex: 1, background: 'rgba(0,0,0,0.3)', borderRadius: '10px',

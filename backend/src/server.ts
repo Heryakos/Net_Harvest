@@ -293,6 +293,15 @@ const start = async () => {
               break;
             }
 
+            case 'mousemove': {
+              const vp = page!.viewportSize() ?? { width: 1280, height: 720 };
+              await page!.mouse.move(
+                (msg.x / 100) * vp.width,
+                (msg.y / 100) * vp.height
+              );
+              break;
+            }
+
             case 'type':
               await page!.keyboard.type(String(msg.text ?? ''));
               break;
