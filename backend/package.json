@@ -12,13 +12,15 @@
   "dependencies": {
     "@fastify/cors": "^11.3.0",
     "@fastify/websocket": "^11.3.1",
+    "@types/ws": "^8.18.1",
     "archiver": "^8.0.0",
     "better-sqlite3": "^13.0.3",
     "cheerio": "^1.2.0",
     "fastify": "^5.12.5",
     "p-queue": "^9.3.3",
     "playwright": "^1.63.0",
-    "undici": "^7.30.0"
+    "undici": "^7.30.0",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@types/archiver": "^8.0.0",

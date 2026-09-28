@@ -1,4 +1,4 @@
-import { chromium, Browser, BrowserContext, Page } from 'playwright';
+import { chromium, BrowserContext } from 'playwright';
 import * as cheerio from 'cheerio';
 
 export interface ExtractionRule {
@@ -7,16 +7,20 @@ export interface ExtractionRule {
 }
 
 export interface CrawlOptions {
-  /** Max number of pages to visit (default: 1 = single page only) */
+  /** Max number of pages to visit (1 = single page, up to 1000) */
   maxPages?: number;
-  /** How long to wait after page load for lazy content (ms) */
+  /** Wait after page load for lazy content (ms) */
   waitTimeMs?: number;
-  /** Stay within same origin only */
+  /** Stay within the same origin */
   sameOriginOnly?: boolean;
+  /** Max concurrent page loads (default: 3) */
+  concurrency?: number;
+  /** Called each time a new page is visited */
+  onPageVisit?: (visited: number, total: number, url: string) => void;
 }
 
 export class Extractor {
-  // Legacy Cheerio extraction for standard HTML (fallback)
+  /** Legacy Cheerio extraction (fallback for static HTML) */
   extract(html: string, rule: ExtractionRule, baseUrl: string): string[] {
     const $ = cheerio.load(html);
     const results: string[] = [];
@@ -30,108 +34,135 @@ export class Extractor {
   }
 
   /**
-   * Multi-page network interceptor using Playwright.
-   * Visits the start URL, then follows discovered links up to `maxPages`.
-   * Returns all unique resource URLs seen across all visited pages.
+   * Multi-page network interceptor.
+   * Crawls up to `maxPages` pages starting from `startUrl`,
+   * using concurrent browser tabs for speed at scale.
    */
   async extractNetwork(
     startUrl: string,
-    waitTimeMs = 5000,
+    waitTimeMs = 4000,
     options: CrawlOptions = {}
   ): Promise<string[]> {
-    const { maxPages = 1, sameOriginOnly = true } = options;
+    const {
+      maxPages = 1,
+      sameOriginOnly = true,
+      concurrency = Math.min(3, maxPages),
+      onPageVisit
+    } = options;
 
-    console.log(`[Extractor] Starting crawl: ${startUrl} (maxPages=${maxPages})`);
+    console.log(`[Extractor] Crawling ${startUrl} — maxPages=${maxPages}, concurrency=${concurrency}`);
 
     const browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({
-      // Realistic user agent so sites don't block us
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
     });
 
     const resourceUrls = new Set<string>();
-    const visitedPages = new Set<string>();
+    const visitedUrls = new Set<string>();
     const pageQueue: string[] = [startUrl];
+    let visitedCount = 0;
 
-    let origin: string;
-    try {
-      origin = new URL(startUrl).origin;
-    } catch {
-      origin = '';
-    }
+    let origin = '';
+    try { origin = new URL(startUrl).origin; } catch {}
 
-    while (pageQueue.length > 0 && visitedPages.size < maxPages) {
-      const currentUrl = pageQueue.shift()!;
-      if (visitedPages.has(currentUrl)) continue;
-      visitedPages.add(currentUrl);
+    const normalise = (url: string) => url.split('#')[0].split('?')[0];
 
-      console.log(`[Extractor] Visiting page ${visitedPages.size}/${maxPages}: ${currentUrl}`);
-
+    const visitPage = async (url: string) => {
       const page = await context.newPage();
 
-      // Intercept ALL network responses
       page.on('response', response => {
-        const reqUrl = response.url();
-        if (reqUrl.startsWith('http')) {
-          resourceUrls.add(reqUrl);
-        }
+        const u = response.url();
+        if (u.startsWith('http')) resourceUrls.add(u);
       });
 
       try {
-        await page.goto(currentUrl, { waitUntil: 'networkidle', timeout: 30000 });
-        // Extra wait for lazy-loaded WebGL textures / React hooks
+        await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
         await page.waitForTimeout(waitTimeMs);
 
-        // Auto-scroll to trigger lazy-loaded images
+        // Auto-scroll to trigger lazy-loaded content
         await page.evaluate(async () => {
           await new Promise<void>(resolve => {
-            let totalHeight = 0;
-            const distance = 300;
-            const timer = setInterval(() => {
+            let totalScrolled = 0;
+            const distance = 400;
+            const interval = setInterval(() => {
               window.scrollBy(0, distance);
-              totalHeight += distance;
-              if (totalHeight >= document.body.scrollHeight) {
-                clearInterval(timer);
+              totalScrolled += distance;
+              if (totalScrolled >= document.body.scrollHeight) {
+                clearInterval(interval);
+                window.scrollTo(0, 0);
                 resolve();
               }
-            }, 100);
+            }, 80);
           });
-        });
-        await page.waitForTimeout(1000);
+        }).catch(() => {});
 
-        // Discover links for multi-page crawl
+        await page.waitForTimeout(800);
+
+        // Collect links for further crawling
         if (maxPages > 1) {
-          const links = await page.evaluate(() => {
-            return Array.from(document.querySelectorAll('a[href]'))
-              .map((a: any) => a.href as string)
-              .filter(href => href.startsWith('http'));
-          });
+          const links: string[] = await page.evaluate(() =>
+            Array.from(document.querySelectorAll('a[href]'))
+              .map((a: any) => a.href)
+              .filter((h: string) => h.startsWith('http'))
+          ).catch(() => []);
 
           for (const link of links) {
             try {
+              const norm = normalise(link);
               const linkOrigin = new URL(link).origin;
-              const normalised = link.split('#')[0]; // strip hash fragments
               if (
-                !visitedPages.has(normalised) &&
-                !pageQueue.includes(normalised) &&
+                !visitedUrls.has(norm) &&
+                !pageQueue.includes(norm) &&
                 (!sameOriginOnly || linkOrigin === origin)
               ) {
-                pageQueue.push(normalised);
+                pageQueue.push(norm);
               }
             } catch {}
           }
         }
       } catch (e) {
-        console.error(`[Extractor] Error on page ${currentUrl}:`, e);
+        console.warn(`[Extractor] Page load error on ${url}:`, (e as Error).message);
+      } finally {
+        await page.close();
+      }
+    };
+
+    // Process queue with controlled concurrency
+    const runQueue = async () => {
+      const slots: Promise<void>[] = [];
+
+      while (visitedCount < maxPages && (pageQueue.length > 0 || slots.length > 0)) {
+        // Fill available concurrency slots
+        while (slots.length < concurrency && visitedCount < maxPages && pageQueue.length > 0) {
+          const url = pageQueue.shift()!;
+          const norm = normalise(url);
+          if (visitedUrls.has(norm)) continue;
+          visitedUrls.add(norm);
+          visitedCount++;
+
+          onPageVisit?.(visitedCount, maxPages, url);
+          console.log(`[Extractor] Visiting [${visitedCount}/${maxPages}]: ${url}`);
+
+          const task = visitPage(url).then(() => {
+            slots.splice(slots.indexOf(task), 1);
+          });
+          slots.push(task);
+        }
+
+        if (slots.length > 0) {
+          await Promise.race(slots);
+        }
       }
 
-      await page.close();
-    }
+      // Wait for any remaining pages to finish
+      await Promise.allSettled(slots);
+    };
 
+    await runQueue();
     await browser.close();
 
     console.log(
-      `[Extractor] Crawl complete. Visited ${visitedPages.size} pages, found ${resourceUrls.size} unique resource URLs.`
+      `[Extractor] Done — visited ${visitedCount} pages, found ${resourceUrls.size} unique resources.`
     );
     return Array.from(resourceUrls);
   }
