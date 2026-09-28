@@ -56,7 +56,7 @@ export default function App() {
   const [wsConnected, setWsConnected] = useState(false);
   const [wsLoading, setWsLoading] = useState(false);
   const [browserFrame, setBrowserFrame] = useState<string | null>(null);
-  const [sessionResources, setSessionResources] = useState<string[]>([]);
+  const [sessionResourceCount, setSessionResourceCount] = useState<number>(0);
   const [navUrl, setNavUrl] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
   const imgRef = useRef<HTMLDivElement>(null);
@@ -166,8 +166,10 @@ export default function App() {
     };
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
-      if (msg.type === 'screenshot') setBrowserFrame(`data:image/jpeg;base64,${msg.data}`);
-      else if (msg.type === 'resources') setSessionResources(msg.resources);
+      if (msg.type === 'screenshot') {
+        setBrowserFrame(`data:image/jpeg;base64,${msg.data}`);
+        if (msg.resourceCount !== undefined) setSessionResourceCount(msg.resourceCount);
+      }
       else if (msg.type === 'navigated') setNavUrl(msg.url);
       else if (msg.type === 'loading') setBrowserFrame(null);
       else if (msg.type === 'picked_selector') {
@@ -296,7 +298,7 @@ export default function App() {
       <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
 
         {/* ── LEFT PANEL ── */}
-        <div className="glass-card" style={{ flex: '0 0 460px' }}>
+        <div className="glass-card" style={{ flex: '1', minWidth: '400px', maxWidth: '600px', display: 'flex', flexDirection: 'column' }}>
 
           {/* STEP 1 */}
           {step === 1 && (
@@ -447,7 +449,7 @@ export default function App() {
                         <option value="regex">Regex</option>
                       </select>
                       {f.type === 'extension' ? (
-                        <div style={{ flex: 2 }}>
+                        <div style={{ flex: 2, minWidth: 0 }}>
                           <CreatableSelect isClearable styles={selectStyles} options={EXTENSION_OPTIONS}
                             value={f.value ? { value: f.value, label: f.value } : null}
                             onChange={(s: any) => updateFilter(i, 'value', s ? s.value : '')}
@@ -547,7 +549,7 @@ export default function App() {
         </div>
 
         {/* ── RIGHT PANEL: Browser ── */}
-        <div className="glass-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '640px' }}>
+        <div className="glass-card" style={{ flex: 1.2, display: 'flex', flexDirection: 'column', minHeight: '640px', minWidth: 0 }}>
           {/* Tabs */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
             {(['interactive', 'preview'] as BrowserTab[]).map(tab => (
@@ -577,9 +579,10 @@ export default function App() {
                       onKeyDown={e => e.key === 'Enter' && sendWs({ type: 'navigate', url: navUrl })}
                       placeholder="Navigate to URL..." style={{ flex: 1, padding: '8px 12px', minWidth: '200px' }} />
                     <button className="btn-primary" onClick={() => sendWs({ type: 'navigate', url: navUrl })} style={{ padding: '8px 14px', fontSize: '0.85rem' }}>Go →</button>
-                    <button onClick={() => { sendWs({ type: 'get_resources' }); }} style={{ padding: '8px 12px', background: 'rgba(59,130,246,0.2)', border: '1px solid rgba(59,130,246,0.4)', color: 'white', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>
-                      📡 {sessionResources.length}
-                    </button>
+                    <div style={{ padding: '8px 12px', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', borderRadius: '6px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span className="pulse-dot" style={{ width: '8px', height: '8px', background: '#10b981', borderRadius: '50%', display: 'inline-block' }}></span>
+                      📡 {sessionResourceCount} Files Captured
+                    </div>
                     <button onClick={disconnectBrowser} style={{ padding: '8px 12px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>✕</button>
                   </>
                 )}
