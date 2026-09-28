@@ -1,13 +1,22 @@
-import { chromium } from 'playwright';
+import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import * as cheerio from 'cheerio';
 
 export interface ExtractionRule {
   selector: string;
-  attribute: string; 
+  attribute: string;
+}
+
+export interface CrawlOptions {
+  /** Max number of pages to visit (default: 1 = single page only) */
+  maxPages?: number;
+  /** How long to wait after page load for lazy content (ms) */
+  waitTimeMs?: number;
+  /** Stay within same origin only */
+  sameOriginOnly?: boolean;
 }
 
 export class Extractor {
-  // Legacy Cheerio extraction for standard HTML (Stage 7 fallback)
+  // Legacy Cheerio extraction for standard HTML (fallback)
   extract(html: string, rule: ExtractionRule, baseUrl: string): string[] {
     const $ = cheerio.load(html);
     const results: string[] = [];
@@ -20,36 +29,110 @@ export class Extractor {
     return results;
   }
 
-  // 🔥 NEW: Playwright Network Interceptor for advanced JS/3D sites!
-  async extractNetwork(url: string, waitTimeMs = 5000): Promise<string[]> {
-    console.log(`[Extractor] Booting Playwright headless browser for ${url}...`);
-    const browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    
-    const resourceUrls = new Set<string>();
+  /**
+   * Multi-page network interceptor using Playwright.
+   * Visits the start URL, then follows discovered links up to `maxPages`.
+   * Returns all unique resource URLs seen across all visited pages.
+   */
+  async extractNetwork(
+    startUrl: string,
+    waitTimeMs = 5000,
+    options: CrawlOptions = {}
+  ): Promise<string[]> {
+    const { maxPages = 1, sameOriginOnly = true } = options;
 
-    // Spy on ALL network traffic, exactly like the Chrome Network tab
-    page.on('response', response => {
-      const reqUrl = response.url();
-      // Keep only actual network requests (ignore data:image base64 strings)
-      if (reqUrl.startsWith('http')) {
-        resourceUrls.add(reqUrl);
-      }
+    console.log(`[Extractor] Starting crawl: ${startUrl} (maxPages=${maxPages})`);
+
+    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext({
+      // Realistic user agent so sites don't block us
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
     });
 
+    const resourceUrls = new Set<string>();
+    const visitedPages = new Set<string>();
+    const pageQueue: string[] = [startUrl];
+
+    let origin: string;
     try {
-      // Go to page and wait for the network to be mostly idle
-      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
-      // Wait a few extra seconds for WebGL textures or React hooks to finish fetching
-      await page.waitForTimeout(waitTimeMs);
-    } catch (e) {
-      console.error("[Extractor] Page load warning:", e);
+      origin = new URL(startUrl).origin;
+    } catch {
+      origin = '';
+    }
+
+    while (pageQueue.length > 0 && visitedPages.size < maxPages) {
+      const currentUrl = pageQueue.shift()!;
+      if (visitedPages.has(currentUrl)) continue;
+      visitedPages.add(currentUrl);
+
+      console.log(`[Extractor] Visiting page ${visitedPages.size}/${maxPages}: ${currentUrl}`);
+
+      const page = await context.newPage();
+
+      // Intercept ALL network responses
+      page.on('response', response => {
+        const reqUrl = response.url();
+        if (reqUrl.startsWith('http')) {
+          resourceUrls.add(reqUrl);
+        }
+      });
+
+      try {
+        await page.goto(currentUrl, { waitUntil: 'networkidle', timeout: 30000 });
+        // Extra wait for lazy-loaded WebGL textures / React hooks
+        await page.waitForTimeout(waitTimeMs);
+
+        // Auto-scroll to trigger lazy-loaded images
+        await page.evaluate(async () => {
+          await new Promise<void>(resolve => {
+            let totalHeight = 0;
+            const distance = 300;
+            const timer = setInterval(() => {
+              window.scrollBy(0, distance);
+              totalHeight += distance;
+              if (totalHeight >= document.body.scrollHeight) {
+                clearInterval(timer);
+                resolve();
+              }
+            }, 100);
+          });
+        });
+        await page.waitForTimeout(1000);
+
+        // Discover links for multi-page crawl
+        if (maxPages > 1) {
+          const links = await page.evaluate(() => {
+            return Array.from(document.querySelectorAll('a[href]'))
+              .map((a: any) => a.href as string)
+              .filter(href => href.startsWith('http'));
+          });
+
+          for (const link of links) {
+            try {
+              const linkOrigin = new URL(link).origin;
+              const normalised = link.split('#')[0]; // strip hash fragments
+              if (
+                !visitedPages.has(normalised) &&
+                !pageQueue.includes(normalised) &&
+                (!sameOriginOnly || linkOrigin === origin)
+              ) {
+                pageQueue.push(normalised);
+              }
+            } catch {}
+          }
+        }
+      } catch (e) {
+        console.error(`[Extractor] Error on page ${currentUrl}:`, e);
+      }
+
+      await page.close();
     }
 
     await browser.close();
-    
-    // Return an array of all unique URLs requested by the website
+
+    console.log(
+      `[Extractor] Crawl complete. Visited ${visitedPages.size} pages, found ${resourceUrls.size} unique resource URLs.`
+    );
     return Array.from(resourceUrls);
   }
 }

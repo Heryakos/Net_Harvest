@@ -88,3 +88,30 @@ h1, h2, h3 {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+input[type='range'] {
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(59, 130, 246, 0.3);
+  outline: none;
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #3b82f6;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.6);
+}
