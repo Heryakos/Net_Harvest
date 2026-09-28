@@ -220,6 +220,7 @@ const start = async () => {
                 (window as any).__pickerActive = true;
                 
                 const overlay = document.createElement('div');
+                overlay.id = 'netHarvestOverlay';
                 Object.assign(overlay.style, {
                   position: 'fixed', top: '0', left: '0', width: '0', height: '0',
                   background: 'rgba(59,130,246,0.3)', border: '2px solid #3b82f6',
@@ -238,30 +239,34 @@ const start = async () => {
                 };
 
                 const getPath = (el: any): string => {
-                  if (el.id) return '#' + CSS.escape(el.id);
-                  if (el === document.body) return 'body';
-                  let path = '';
-                  while (el && el !== document.body) {
-                    if (el.id) {
-                      path = '#' + CSS.escape(el.id) + (path ? ' > ' + path : '');
-                      break;
+                  try {
+                    if (el.id) return '#' + CSS.escape(el.id);
+                    if (el === document.body || !el.tagName) return 'body';
+                    let path = '';
+                    while (el && el !== document.body) {
+                      if (el.id) {
+                        path = '#' + CSS.escape(el.id) + (path ? ' > ' + path : '');
+                        break;
+                      }
+                      let selector = el.tagName.toLowerCase();
+                      if (el.className && typeof el.className === 'string') {
+                        const classes = el.className.trim().split(/\s+/).filter((c: string) => c).map(CSS.escape);
+                        if (classes.length > 0) selector += '.' + classes.join('.');
+                      }
+                      let siblingIndex = 1;
+                      let sibling = el.previousElementSibling;
+                      while (sibling) {
+                        siblingIndex++;
+                        sibling = sibling.previousElementSibling;
+                      }
+                      selector += `:nth-child(${siblingIndex})`;
+                      path = selector + (path ? ' > ' + path : '');
+                      el = el.parentElement;
                     }
-                    let selector = el.tagName.toLowerCase();
-                    if (el.className && typeof el.className === 'string') {
-                      const classes = el.className.trim().split(/\s+/).filter((c: string) => c).map(CSS.escape);
-                      if (classes.length > 0) selector += '.' + classes.join('.');
-                    }
-                    let siblingIndex = 1;
-                    let sibling = el.previousElementSibling;
-                    while (sibling) {
-                      siblingIndex++;
-                      sibling = sibling.previousElementSibling;
-                    }
-                    selector += `:nth-child(${siblingIndex})`;
-                    path = selector + (path ? ' > ' + path : '');
-                    el = el.parentElement;
+                    return path || 'body';
+                  } catch (err) {
+                    return 'body';
                   }
-                  return path;
                 };
 
                 const clickHandler = (e: MouseEvent) => {
@@ -279,8 +284,27 @@ const start = async () => {
                   (window as any).__netHarvestPick(selector);
                 };
 
+                (window as any).__pickerMoveHandler = moveHandler;
+                (window as any).__pickerClickHandler = clickHandler;
+
                 document.addEventListener('mousemove', moveHandler, true);
                 document.addEventListener('click', clickHandler, true);
+              }).catch(() => {});
+              break;
+
+            case 'disable_picker':
+              await page!.evaluate(() => {
+                if (!(window as any).__pickerActive) return;
+                
+                if ((window as any).__pickerMoveHandler) {
+                  document.removeEventListener('mousemove', (window as any).__pickerMoveHandler, true);
+                }
+                if ((window as any).__pickerClickHandler) {
+                  document.removeEventListener('click', (window as any).__pickerClickHandler, true);
+                }
+                const overlay = document.getElementById('netHarvestOverlay');
+                if (overlay) document.body.removeChild(overlay);
+                (window as any).__pickerActive = false;
               }).catch(() => {});
               break;
 

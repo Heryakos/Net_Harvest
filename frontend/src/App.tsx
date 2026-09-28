@@ -60,6 +60,7 @@ export default function App() {
   const [navUrl, setNavUrl] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
   const imgRef = useRef<HTMLDivElement>(null);
+  const lastMouseMoveRef = useRef<number>(0);
 
   // ── Filters ────────────────────────────────────────────────────────────────
   const addFilter = () => setFilters(f => [...f, { type: 'extension', value: '.png', isInclude: true }]);
@@ -222,6 +223,10 @@ export default function App() {
 
   const handleImgMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isPicking) return; // Only forward mouse moves when picking to save bandwidth
+    const now = Date.now();
+    if (now - lastMouseMoveRef.current < 100) return; // Throttle to max 10fps
+    lastMouseMoveRef.current = now;
+
     const rect = e.currentTarget.getBoundingClientRect();
     
     const imgRatio = 1280 / 720;
@@ -304,10 +309,18 @@ export default function App() {
               <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <span>🎯 Target Specific Section (Optional)</span>
                 {wsConnected && (
-                  <button onClick={() => { setIsPicking(true); sendWs({ type: 'enable_picker' }); }} style={{
-                    background: isPicking ? 'rgba(59,130,246,0.6)' : 'rgba(59,130,246,0.2)', color: 'white', border: 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer'
+                  <button onClick={() => { 
+                    if (isPicking) {
+                      setIsPicking(false);
+                      sendWs({ type: 'disable_picker' });
+                    } else {
+                      setIsPicking(true);
+                      sendWs({ type: 'enable_picker' });
+                    }
+                  }} style={{
+                    background: isPicking ? 'rgba(239,68,68,0.3)' : 'rgba(59,130,246,0.2)', color: 'white', border: isPicking ? '1px solid rgba(239,68,68,0.5)' : 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer'
                   }}>
-                    {isPicking ? '👆 Click an element in browser...' : '🎯 Pick from Browser'}
+                    {isPicking ? 'Cancel Picking' : '🎯 Pick from Browser'}
                   </button>
                 )}
               </label>
