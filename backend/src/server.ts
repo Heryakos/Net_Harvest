@@ -100,7 +100,7 @@ fastify.post('/api/detect', async (request, reply) => {
       '.xls': 'Documents', '.xlsx': 'Documents', '.txt': 'Documents',
       '.csv': 'Documents', '.ppt': 'Documents', '.pptx': 'Documents',
       '.woff': 'Fonts', '.woff2': 'Fonts', '.ttf': 'Fonts', '.otf': 'Fonts', '.eot': 'Fonts',
-      '.js': 'Web Assets', '.css': 'Web Assets', '.wasm': 'Web Assets',
+      '.js': 'Web Assets', '.css': 'Web Assets', '.wasm': 'Web Assets', '.html': 'Web Assets', '.xhtml': 'Web Assets',
       '.json': 'Data', '.xml': 'Data', '.yaml': 'Data', '.yml': 'Data',
     };
 

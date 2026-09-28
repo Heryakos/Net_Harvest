@@ -79,20 +79,33 @@ export class Extractor {
         await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
         await page.waitForTimeout(waitTimeMs);
 
-        // Auto-scroll to trigger lazy-loaded content
+        // Auto-scroll to trigger lazy-loaded content and infinite scrolls
         await page.evaluate(async () => {
           await new Promise<void>(resolve => {
-            let totalScrolled = 0;
-            const distance = 400;
+            let lastHeight = document.body.scrollHeight;
+            let unchangedCount = 0;
+            const distance = 600;
+            const maxScrolls = 100; // Limit to prevent getting stuck forever
+            let scrollCount = 0;
+
             const interval = setInterval(() => {
               window.scrollBy(0, distance);
-              totalScrolled += distance;
-              if (totalScrolled >= document.body.scrollHeight) {
-                clearInterval(interval);
-                window.scrollTo(0, 0);
-                resolve();
+              scrollCount++;
+              
+              const newHeight = document.body.scrollHeight;
+              if (newHeight === lastHeight) {
+                unchangedCount++;
+                // If height hasn't changed for 1.5 seconds (6 ticks of 250ms), we're done
+                if (unchangedCount >= 6 || scrollCount >= maxScrolls) {
+                  clearInterval(interval);
+                  window.scrollTo(0, 0);
+                  resolve();
+                }
+              } else {
+                lastHeight = newHeight;
+                unchangedCount = 0; // Reset because we found new content
               }
-            }, 80);
+            }, 250); // 250ms allows time for network fetches and DOM updates
           });
         }).catch(() => {});
 

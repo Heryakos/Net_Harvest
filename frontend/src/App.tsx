@@ -15,7 +15,7 @@ const COMMON_EXTENSIONS = [
   '.zip', '.tar', '.gz', '.rar',
   '.gltf', '.glb', '.obj', '.fbx', '.stl', '.ply',
   '.js', '.css', '.woff', '.woff2', '.ttf', '.otf',
-  '.json', '.xml', '.wasm', '.yaml'
+  '.json', '.xml', '.wasm', '.yaml', '.html', '.xhtml'
 ];
 
 const EXTENSION_OPTIONS = COMMON_EXTENSIONS.map(ext => ({ value: ext, label: ext }));
