@@ -152,7 +152,7 @@ export default function App() {
   const connectBrowser = useCallback(() => {
     wsRef.current?.close();
     setWsLoading(true);
-    setSessionResources([]);
+    setSessionResourceCount(0);
     setBrowserFrame(null);
     setNavUrl(targetUrl);
 
