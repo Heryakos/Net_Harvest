@@ -21,8 +21,9 @@ db.pragma('journal_mode = WAL');
 const schema = `
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,
-  status TEXT NOT NULL, -- 'running', 'paused', 'completed', 'failed'
+  status TEXT NOT NULL,
   startUrl TEXT,
+  stats TEXT,
   createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -40,3 +41,8 @@ CREATE TABLE IF NOT EXISTS resources (
 
 // Execute the schema creation
 db.exec(schema);
+
+// Migration for existing DBs
+try {
+  db.exec("ALTER TABLE jobs ADD COLUMN stats TEXT");
+} catch {}

@@ -23,6 +23,12 @@ export class JobRunner {
     // 2. Add to the rate-limited queue
     downloadQueue.add(async () => {
       try {
+        // Update progress callback
+        crawlOptions.onPageVisit = (visited, total, currentUrl) => {
+          const stats = { crawled: visited, max: total, currentUrl };
+          db.prepare("UPDATE jobs SET stats = ? WHERE id = ?").run(JSON.stringify(stats), jobId);
+        };
+
         const extractor = new Extractor();
 
         // Crawl one or many pages depending on user config

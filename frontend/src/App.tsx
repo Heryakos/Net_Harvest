@@ -49,7 +49,7 @@ export default function App() {
   const [browserTab, setBrowserTab] = useState<BrowserTab>('interactive');
   const [jobStatus, setJobStatus] = useState('');
   const [downloadReady, setDownloadReady] = useState(false);
-  const [jobStats, setJobStats] = useState<{ resources?: number } | null>(null);
+  const [jobStats, setJobStats] = useState<{ crawled?: number, max?: number, currentUrl?: string } | null>(null);
   const [isHovering, setIsHovering] = useState(false);
 
   // WS Interactive browser
@@ -108,6 +108,9 @@ export default function App() {
         const job = jobs.find((j: any) => j.id === activeJobId);
         if (job) {
           setJobStatus(job.status);
+          if (job.stats) {
+            try { setJobStats(JSON.parse(job.stats)); } catch {}
+          }
           if (job.status === 'completed' || job.status === 'failed') {
             setDownloadReady(true);
             clearInterval(interval);
@@ -521,17 +524,40 @@ export default function App() {
               {!downloadReady && jobStatus === 'running' && (
                 <div style={{ padding: '12px', background: 'rgba(59,130,246,0.08)', borderRadius: '8px', marginBottom: '16px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                   ⏳ Playwright is crawling the site in the background using 3 concurrent tabs.
-                  {maxPages > 10 && ` Expect ${Math.round(maxPages * 0.3 / 3)} – ${Math.round(maxPages * 0.8 / 3)} minutes for ${maxPages} pages.`}
+                  
+                  {jobStats && jobStats.crawled !== undefined && (
+                    <div style={{ marginTop: '12px', padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', border: '1px solid rgba(59,130,246,0.2)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>Crawled {jobStats.crawled} pages</span>
+                        <span>(Max limit: {jobStats.max})</span>
+                      </div>
+                      <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden', marginBottom: '6px' }}>
+                        <div style={{ width: `${Math.min(100, (jobStats.crawled / (jobStats.max || 1)) * 100)}%`, height: '100%', background: '#60a5fa', transition: 'width 0.3s' }}></div>
+                      </div>
+                      <div style={{ opacity: 0.7, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        Currently at: {jobStats.currentUrl}
+                      </div>
+                    </div>
+                  )}
+                  {!jobStats && maxPages > 10 && <div style={{ marginTop: '8px' }}>Expect {Math.round(maxPages * 0.3 / 3)} – {Math.round(maxPages * 0.8 / 3)} minutes for {maxPages} pages.</div>}
                 </div>
               )}
 
               {downloadReady && jobStatus === 'completed' && (
-                <button className="btn-primary"
-                  onClick={() => window.location.href = `http://localhost:3000/api/jobs/${activeJobId}/download`}
-                  style={{ width: '100%', padding: '16px', fontSize: '1.1rem', marginBottom: '12px', transform: isHovering ? 'scale(1.02)' : 'scale(1)', transition: 'transform 0.2s' }}
-                  onMouseEnter={() => setIsHovering(true)} onMouseLeave={() => setIsHovering(false)}>
-                  📦 Download ZIP Archive
-                </button>
+                <div style={{ marginBottom: '12px' }}>
+                  {jobStats && jobStats.crawled !== undefined && (
+                    <div style={{ marginBottom: '16px', padding: '12px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', fontSize: '0.85rem', color: '#10b981' }}>
+                      ✅ <b>Done!</b> We found and successfully crawled <b>{jobStats.crawled} real pages</b> on this site.
+                      {jobStats.crawled < (jobStats.max || 1) && ` (This is less than your ${jobStats.max} max limit because there were no more pages to find!)`}
+                    </div>
+                  )}
+                  <button className="btn-primary"
+                    onClick={() => window.location.href = `http://localhost:3000/api/jobs/${activeJobId}/download`}
+                    style={{ width: '100%', padding: '16px', fontSize: '1.1rem', transform: isHovering ? 'scale(1.02)' : 'scale(1)', transition: 'transform 0.2s' }}
+                    onMouseEnter={() => setIsHovering(true)} onMouseLeave={() => setIsHovering(false)}>
+                    📦 Download ZIP Archive
+                  </button>
+                </div>
               )}
 
               {jobStatus === 'failed' && (
