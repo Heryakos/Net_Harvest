@@ -46,6 +46,7 @@ export default function App() {
   const [sameOriginOnly, setSameOriginOnly] = useState(true);
   const [crawlSpeed, setCrawlSpeed] = useState<'slow' | 'medium' | 'fast'>('medium');
   const [targetSelector, setTargetSelector] = useState('');
+  const [candidateSelectors, setCandidateSelectors] = useState<string[]>([]);
   const [isPicking, setIsPicking] = useState(false);
   const [browserTab, setBrowserTab] = useState<BrowserTab>('interactive');
   const [jobStatus, setJobStatus] = useState('');
@@ -180,6 +181,9 @@ export default function App() {
       else if (msg.type === 'picked_selector') {
         setTargetSelector(msg.selector);
         setIsPicking(false);
+      }
+      else if (msg.type === 'candidate_selectors') {
+        setCandidateSelectors(msg.selectors);
       }
     };
     ws.onclose = () => { setWsConnected(false); setBrowserFrame(null); setWsLoading(false); setIsPicking(false); };
@@ -342,10 +346,13 @@ export default function App() {
                       </button>
                     )}
                   </label>
-                  <input className="input-glass" value={targetSelector} onChange={e => setTargetSelector(e.target.value)}
+                  <input list="candidate-selectors" className="input-glass" value={targetSelector} onChange={e => setTargetSelector(e.target.value)}
                     placeholder="e.g. .card-container or #gallery" style={{ marginBottom: '20px' }} />
+                  <datalist id="candidate-selectors">
+                    {candidateSelectors.map(s => <option key={s} value={s} />)}
+                  </datalist>
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '20px' }}>
-                    {isPicking ? <span style={{ color: '#60a5fa' }}>Hover over the interactive browser on the right and click the container you want.</span> : 'Only scroll and extract images/media from this specific CSS selector instead of the whole page.'}
+                    {isPicking ? <span style={{ color: '#60a5fa' }}>Hover over the interactive browser on the right and click the container you want.</span> : 'Pick from the dropdown, use the 🎯 Picker, or type a custom selector manually.'}
                   </p>
 
                   {/* Multi-page crawl */}

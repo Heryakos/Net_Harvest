@@ -169,6 +169,37 @@ const start = async () => {
         } catch {}
       };
 
+      const sendCandidateSelectors = async () => {
+        if (!page || socket.readyState !== WebSocket.OPEN) return;
+        try {
+          const selectors = await page.evaluate(() => {
+            const candidates = new Set<string>();
+            const extractFromDoc = (doc: Element | Document) => {
+              doc.querySelectorAll('[id]').forEach(el => candidates.add('#' + CSS.escape(el.id)));
+              doc.querySelectorAll('main, article, section, header, footer, .container, .card, .gallery, .content, .wrapper, .page, .page-wrap').forEach(el => {
+                if (el.id) {
+                  candidates.add('#' + CSS.escape(el.id));
+                } else if (el.className && typeof el.className === 'string') {
+                  const classes = el.className.trim().split(/\s+/).filter(Boolean);
+                  if (classes.length > 0) candidates.add('.' + CSS.escape(classes[0]));
+                } else {
+                  candidates.add(el.tagName.toLowerCase());
+                }
+              });
+              doc.querySelectorAll('iframe').forEach((iframe: any) => {
+                try {
+                  const idoc = iframe.contentDocument || iframe.contentWindow?.document;
+                  if (idoc) extractFromDoc(idoc);
+                } catch (e) {}
+              });
+            };
+            extractFromDoc(document);
+            return Array.from(candidates).slice(0, 100);
+          });
+          send({ type: 'candidate_selectors', selectors });
+        } catch {}
+      };
+
       const startSession = async (url: string) => {
         if (browserContext) await browserContext.close().catch(() => {});
         sessionResources.clear();
@@ -194,6 +225,7 @@ const start = async () => {
           // Navigate the main page to the new URL and close the invisible popup
           await page!.goto(popupUrl, { waitUntil: 'load', timeout: 15000 }).catch(() => {});
           send({ type: 'navigated', url: page!.url() });
+          sendCandidateSelectors();
           await popup.close().catch(() => {});
         });
 
@@ -207,6 +239,7 @@ const start = async () => {
 
         send({ type: 'session_ready', sessionId });
         send({ type: 'navigated', url: page.url() });
+        sendCandidateSelectors();
       };
 
       socket.on('message', async (raw: Buffer) => {
@@ -231,6 +264,7 @@ const start = async () => {
             case 'navigate':
               await page!.goto(msg.url, { waitUntil: 'load', timeout: 15000 }).catch(() => {});
               send({ type: 'navigated', url: page!.url() });
+              sendCandidateSelectors();
               break;
 
             case 'pick_element': {
@@ -382,6 +416,10 @@ const start = async () => {
 
             case 'get_resources':
               send({ type: 'resources', resources: Array.from(sessionResources) });
+              break;
+
+            case 'get_candidate_selectors':
+              await sendCandidateSelectors();
               break;
 
             case 'screenshot':
