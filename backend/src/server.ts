@@ -274,7 +274,23 @@ const start = async () => {
                 const overlay = document.getElementById('netHarvestOverlay');
                 if (overlay) overlay.style.pointerEvents = 'none'; // Ensure it's not pickable
                 
-                const target = document.elementFromPoint(x, y);
+                const elements = document.elementsFromPoint(x, y);
+                let target = null;
+                for (const el of elements) {
+                  // Skip our own overlay
+                  if (el.id === 'netHarvestOverlay') continue;
+                  
+                  // Skip massive fullscreen transparent overlays (like swipe catchers)
+                  const rect = el.getBoundingClientRect();
+                  const isFullScreen = (rect.width >= window.innerWidth * 0.95 && rect.height >= window.innerHeight * 0.95);
+                  if (isFullScreen && el.tagName.toLowerCase() === 'div' && el.children.length === 0) {
+                     continue; // Skip empty fullscreen divs
+                  }
+                  
+                  target = el;
+                  break;
+                }
+                
                 if (overlay) document.body.removeChild(overlay); // Clean up
                 
                 if (!target) return 'body';
@@ -307,7 +323,19 @@ const start = async () => {
                 
                 // Hide overlay temporarily to find element underneath
                 overlay.style.display = 'none';
-                const target = document.elementFromPoint(x, y);
+                const elements = document.elementsFromPoint(x, y);
+                let target = null;
+                for (const el of elements) {
+                  if (el.id === 'netHarvestOverlay') continue;
+                  
+                  const rect = el.getBoundingClientRect();
+                  const isFullScreen = (rect.width >= window.innerWidth * 0.95 && rect.height >= window.innerHeight * 0.95);
+                  if (isFullScreen && el.tagName.toLowerCase() === 'div' && el.children.length === 0) {
+                     continue;
+                  }
+                  target = el;
+                  break;
+                }
                 overlay.style.display = 'block';
 
                 if (target) {

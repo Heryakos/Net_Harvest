@@ -135,16 +135,40 @@ export class Extractor {
             const el = document.querySelector(selector);
             if (!el) return [];
             const urls: string[] = [];
-            el.querySelectorAll<HTMLImageElement>('img').forEach(img => urls.push(img.src));
-            el.querySelectorAll<HTMLVideoElement>('video, source').forEach(v => urls.push(v.src));
-            el.querySelectorAll<HTMLAnchorElement>('a').forEach(a => urls.push(a.href));
-            el.querySelectorAll('*').forEach(child => {
-              const bg = window.getComputedStyle(child).backgroundImage;
-              if (bg && bg !== 'none') {
-                const match = bg.match(/url\(['"]?(.*?)['"]?\)/);
-                if (match) urls.push(match[1]);
-              }
-            });
+            
+            const extractFromNode = (root: Element | Document) => {
+              root.querySelectorAll<HTMLImageElement>('img').forEach(img => urls.push(img.src));
+              root.querySelectorAll<HTMLVideoElement>('video, source').forEach(v => urls.push(v.src));
+              root.querySelectorAll<HTMLAnchorElement>('a').forEach(a => urls.push(a.href));
+              root.querySelectorAll('*').forEach(child => {
+                const bg = window.getComputedStyle(child).backgroundImage;
+                if (bg && bg !== 'none') {
+                  const match = bg.match(/url\(['"]?(.*?)['"]?\)/);
+                  if (match) urls.push(match[1]);
+                }
+              });
+              
+              root.querySelectorAll('iframe').forEach(iframe => {
+                try {
+                  const idoc = iframe.contentDocument || iframe.contentWindow?.document;
+                  if (idoc) extractFromNode(idoc);
+                } catch (e) {
+                  // ignore cross-origin iframes
+                }
+              });
+            };
+
+            // If the selected element itself is an iframe, pierce it immediately
+            if (el.tagName.toLowerCase() === 'iframe') {
+               const iframe = el as HTMLIFrameElement;
+               try {
+                 const idoc = iframe.contentDocument || iframe.contentWindow?.document;
+                 if (idoc) extractFromNode(idoc);
+               } catch (e) {}
+            } else {
+               extractFromNode(el);
+            }
+            
             return urls.filter(Boolean);
           }, targetSelector).catch(() => []);
 
