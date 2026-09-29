@@ -53,7 +53,7 @@ export class Extractor {
     startUrl: string,
     waitTimeMs = 4000,
     options: CrawlOptions = {}
-  ): Promise<string[]> {
+  ): Promise<{ urls: string[]; cookies: string }> {
     const {
       maxPages = 1,
       sameOriginOnly = true,
@@ -337,11 +337,13 @@ export class Extractor {
     };
 
     await runQueue();
+    const browserCookies = await context.cookies();
+    const cookieString = browserCookies.map(c => `${c.name}=${c.value}`).join('; ');
     await context.close();
 
     console.log(
       `[Extractor] Done — visited ${visitedCount} pages, found ${resourceUrls.size} unique resources.`
     );
-    return Array.from(resourceUrls);
+    return { urls: Array.from(resourceUrls), cookies: cookieString };
   }
 }

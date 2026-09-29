@@ -127,6 +127,8 @@ export default function App() {
 
   // ── Live preview ────────────────────────────────────────────────────────────
   const runPreview = async () => {
+    // Release the browser profile lock so the headless extractor can use the authenticated session
+    disconnectBrowser();
     setLoading(true);
     try {
       const res = await fetch('http://localhost:3000/api/preview', {
@@ -141,6 +143,10 @@ export default function App() {
 
   // ── Start job ───────────────────────────────────────────────────────────────
   const startJob = async () => {
+    // Crucial: Disconnect the interactive browser to release the profile lock
+    // so the headless extractor can use the authenticated session!
+    disconnectBrowser();
+
     try {
       const res = await fetch('http://localhost:3000/api/jobs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },

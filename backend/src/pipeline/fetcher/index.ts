@@ -22,11 +22,11 @@ export class Fetcher {
   /**
    * Streams a resource from the network directly to the disk.
    */
-  async downloadResource(url: string, destDir: string): Promise<string> {
+  async downloadResource(url: string, destDir: string, cookies?: string): Promise<string> {
     console.log(`[Fetcher] Downloading resource from ${url}`);
-    const res = await request(url, {
-      headers: { 'User-Agent': this.userAgent }
-    });
+    const headers: Record<string, string> = { 'User-Agent': this.userAgent };
+    if (cookies) headers['Cookie'] = cookies;
+    const res = await request(url, { headers });
     
     if (res.statusCode !== 200) throw new Error(`Failed to download: Status ${res.statusCode}`);
     

@@ -38,7 +38,7 @@ export class JobRunner {
 
         // Crawl using seedUrls if provided (from browser capture) or from startUrl
         const waitTime = crawlOptions.waitTimeMs || 4000;
-        const rawUrls = await extractor.extractNetwork(url, waitTime, crawlOptions);
+        const { urls: rawUrls, cookies } = await extractor.extractNetwork(url, waitTime, crawlOptions);
 
         // Filter to only what the user wants
         const filterEngine = new URLFilter(filters || []);
@@ -57,7 +57,7 @@ export class JobRunner {
             ).run(jobId, targetUrl);
             const resId = info.lastInsertRowid;
 
-            const localPath = await fetcher.downloadResource(targetUrl, destDir);
+            const localPath = await fetcher.downloadResource(targetUrl, destDir, cookies);
 
             db.prepare(
               "UPDATE resources SET localPath = ?, status = 'downloaded' WHERE id = ?"

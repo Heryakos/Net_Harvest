@@ -80,7 +80,7 @@ fastify.post('/api/preview', async (request, reply) => {
   if (!url) return reply.status(400).send({ error: 'url required' });
   try {
     const extractor = new Extractor();
-    const rawUrls = await extractor.extractNetwork(url, 3000, {
+    const { urls: rawUrls } = await extractor.extractNetwork(url, 3000, {
       maxPages: Math.min(Number(maxPages) || 1, 5),   // cap preview at 5 pages
       targetSelector
     });
