@@ -114,6 +114,12 @@ export class Extractor {
     }
     const pageQueue: string[] = [...initialQueue];
 
+    // When we have seed URLs, we know exactly how many pages to visit.
+    // Override maxPages to at least match the queue size.
+    const effectiveMaxPages = seedUrls && seedUrls.length > 0
+      ? Math.max(maxPages, initialQueue.length)
+      : maxPages;
+
     const visitPage = async (url: string) => {
       const page = await context.newPage();
 
@@ -298,14 +304,14 @@ export class Extractor {
     const runQueue = async () => {
       const slots: Promise<void>[] = [];
 
-      while (visitedCount < maxPages && (pageQueue.length > 0 || slots.length > 0)) {
+      while (visitedCount < effectiveMaxPages && (pageQueue.length > 0 || slots.length > 0)) {
         if (options.isCancelled && options.isCancelled()) {
           console.log(`[Extractor] Crawl cancelled, aborting queue.`);
           break;
         }
 
         // Fill available concurrency slots
-        while (slots.length < concurrency && visitedCount < maxPages && pageQueue.length > 0) {
+        while (slots.length < concurrency && visitedCount < effectiveMaxPages && pageQueue.length > 0) {
           const url = pageQueue.shift()!;
           const norm = normalise(url);
           if (visitedUrls.has(norm)) continue;

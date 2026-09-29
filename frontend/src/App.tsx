@@ -203,9 +203,22 @@ export default function App() {
       else if (msg.type === 'iframe_srcs') {
         if (msg.srcs && msg.srcs.length > 0) {
           setSeedUrls(msg.srcs);
-          alert(`✅ Captured ${msg.srcs.length} page URLs from your current browser position!\n\nThe extraction will now start from this exact page and continue forward.\n\nFirst captured URL: ${msg.srcs[0]}`);
+          // Auto-set image filters when capturing from a book reader
+          setFilters(prev => {
+            // Remove any xhtml/html filters (they block images)
+            const cleaned = prev.filter(f => !['xhtml', '.xhtml', 'html', '.html'].includes(f.value.toLowerCase()));
+            // Add image types if not already present
+            const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
+            const toAdd = imageExts
+              .filter(ext => !cleaned.some(f => f.value.toLowerCase() === ext))
+              .map(ext => ({ type: 'extension', value: ext, isInclude: true }));
+            return [...cleaned, ...toAdd];
+          });
+          // Also show advanced settings so user can see what changed
+          setShowAdvanced(true);
+          alert(`✅ Captured ${msg.srcs.length} page URLs from your current browser position!\n\nFilters have been auto-set to: jpg, jpeg, png, gif, webp\n\nNow click "▶ Start Extraction" to begin.`);
         } else {
-          alert('⚠️ No iframes found on this page. Make sure the book page is loaded and try using a selector like #readium-right-content.');
+          alert('⚠️ No iframes found on this page.\n\nMake sure:\n1. The book page is fully loaded\n2. You have the correct selector in the Target section (try #readium-right-content)\n3. The interactive browser is connected');
         }
       }
     };
@@ -566,6 +579,38 @@ export default function App() {
                   </div>
                 )}
               </div>
+
+              {/* Filter health check */}
+              {(() => {
+                const hasImageFilter = filters.some(f =>
+                  f.isInclude && ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.avif'].includes(f.value.toLowerCase())
+                );
+                const hasBlockingXhtmlFilter = filters.some(f => f.isInclude && ['.xhtml', 'xhtml'].includes(f.value.toLowerCase()));
+                const noFilters = filters.filter(f => f.isInclude).length === 0;
+                if (seedUrls.length > 0 && !hasImageFilter) {
+                  return (
+                    <div style={{ marginBottom: '12px', padding: '12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '8px', fontSize: '0.82rem', color: '#fca5a5' }}>
+                      ⚠️ <b>Filter Warning (Book Mode):</b> Your filters don't include image types (jpg, jpeg, png). The book images will be blocked!<br />
+                      <button onClick={() => setFilters(f => {
+                        const cleaned = f.filter(r => !['xhtml', '.xhtml'].includes(r.value.toLowerCase()));
+                        const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
+                        const toAdd = imageExts.filter(e => !cleaned.some(r => r.value.toLowerCase() === e)).map(e => ({ type: 'extension', value: e, isInclude: true }));
+                        return [...cleaned, ...toAdd];
+                      })} style={{ marginTop: '8px', background: 'rgba(239,68,68,0.3)', border: '1px solid rgba(239,68,68,0.5)', color: 'white', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                        🔧 Auto-fix filters for me
+                      </button>
+                    </div>
+                  );
+                }
+                if (hasBlockingXhtmlFilter && !hasImageFilter) {
+                  return (
+                    <div style={{ marginBottom: '12px', padding: '10px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '8px', fontSize: '0.82rem', color: '#fbbf24' }}>
+                      ⚠️ You have <b>xhtml</b> in your filters but no image types. This will find the page files but block the actual images inside them. Add <b>jpg</b> and <b>jpeg</b> too.
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)', flex: 1 }} onClick={() => setStep(1)}>← Back</button>

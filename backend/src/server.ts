@@ -33,13 +33,14 @@ fastify.post('/api/jobs', async (request, reply) => {
   if (crawlSpeed === 'slow') { waitTimeMs = 8000; concurrency = 1; }
   else if (crawlSpeed === 'fast') { waitTimeMs = 1500; concurrency = 6; }
 
+  const hasSeedUrls = seedUrls && seedUrls.length > 0;
   JobRunner.startJob(jobId, startUrl, filters || [], {
     maxPages: Math.min(Number(maxPages) || 1, 1000),
-    sameOriginOnly: sameOriginOnly !== false,
+    sameOriginOnly: hasSeedUrls ? false : (sameOriginOnly !== false),
     targetSelector,
     waitTimeMs,
     concurrency,
-    seedUrls: seedUrls && seedUrls.length > 0 ? seedUrls : undefined
+    seedUrls: hasSeedUrls ? seedUrls : undefined
   });
   return reply.status(201).send(job);
 });
