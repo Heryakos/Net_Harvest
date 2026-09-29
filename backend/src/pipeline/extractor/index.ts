@@ -1,4 +1,9 @@
-import { chromium, BrowserContext } from 'playwright';
+import { BrowserContext } from 'playwright';
+import path from 'path';
+import fs from 'fs';
+const { chromium } = require('playwright-extra');
+const stealthPlugin = require('puppeteer-extra-plugin-stealth');
+chromium.use(stealthPlugin());
 import * as cheerio from 'cheerio';
 
 export interface ExtractionRule {
@@ -55,8 +60,13 @@ export class Extractor {
 
     console.log(`[Extractor] Crawling ${startUrl} — maxPages=${maxPages}, concurrency=${concurrency}`);
 
-    const browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({
+    const userDataDir = path.join(process.cwd(), 'data', 'browser_session');
+    if (!fs.existsSync(userDataDir)) {
+      fs.mkdirSync(userDataDir, { recursive: true });
+    }
+
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: true,
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
     });
 
@@ -204,7 +214,7 @@ export class Extractor {
     };
 
     await runQueue();
-    await browser.close();
+    await context.close();
 
     console.log(
       `[Extractor] Done — visited ${visitedCount} pages, found ${resourceUrls.size} unique resources.`

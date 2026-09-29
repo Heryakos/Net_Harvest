@@ -7,7 +7,11 @@ import { URLFilter, FilterRule } from './pipeline/filter';
 import { JobRunner } from './jobs/runner';
 import { buildJobZip } from './pipeline/packager';
 import fs from 'fs';
-import { chromium, Browser, Page } from 'playwright';
+import path from 'path';
+import { Browser, Page, BrowserContext } from 'playwright';
+const { chromium } = require('playwright-extra');
+const stealthPlugin = require('puppeteer-extra-plugin-stealth');
+chromium.use(stealthPlugin());
 import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
 
@@ -19,14 +23,22 @@ fastify.get('/ping', async () => ({ status: 'ok' }));
 fastify.get('/api/jobs', async () => JobModel.getAllJobs());
 
 fastify.post('/api/jobs', async (request, reply) => {
-  const { startUrl, filters, maxPages, sameOriginOnly, targetSelector } = request.body as any;
+  const { startUrl, filters, maxPages, sameOriginOnly, targetSelector, crawlSpeed } = request.body as any;
   if (!startUrl) return reply.status(400).send({ error: 'startUrl is required' });
   const jobId = randomUUID();
   const job = JobModel.createJob(jobId, startUrl);
+
+  let waitTimeMs = 4000;
+  let concurrency = 3;
+  if (crawlSpeed === 'slow') { waitTimeMs = 8000; concurrency = 1; }
+  else if (crawlSpeed === 'fast') { waitTimeMs = 1500; concurrency = 6; }
+
   JobRunner.startJob(jobId, startUrl, filters || [], {
     maxPages: Math.min(Number(maxPages) || 1, 1000),
     sameOriginOnly: sameOriginOnly !== false,
-    targetSelector
+    targetSelector,
+    waitTimeMs,
+    concurrency
   });
   return reply.status(201).send(job);
 });
@@ -138,7 +150,7 @@ const start = async () => {
 
     wss.on('connection', (socket: WebSocket) => {
       const sessionId = randomUUID();
-      let browser: Browser | null = null;
+      let browserContext: BrowserContext | null = null;
       let page: Page | null = null;
       let screenshotInterval: NodeJS.Timeout | null = null;
       const sessionResources = new Set<string>();
@@ -158,15 +170,20 @@ const start = async () => {
       };
 
       const startSession = async (url: string) => {
-        if (browser) await browser.close().catch(() => {});
+        if (browserContext) await browserContext.close().catch(() => {});
         sessionResources.clear();
 
-        browser = await chromium.launch({ headless: true });
-        const context = await browser.newContext({
+        const userDataDir = path.join(process.cwd(), 'data', 'browser_session');
+        if (!fs.existsSync(userDataDir)) {
+          fs.mkdirSync(userDataDir, { recursive: true });
+        }
+
+        browserContext = await chromium.launchPersistentContext(userDataDir, {
+          headless: true,
           viewport: { width: 1280, height: 720 },
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
         });
-        page = await context.newPage();
+        page = browserContext.pages().length > 0 ? browserContext.pages()[0] : await browserContext.newPage();
 
         page.on('console', msg => console.log(`[Browser Console] ${msg.type()}: ${msg.text()}`));
         page.on('pageerror', err => console.error(`[Browser Error] ${err.message}`));
@@ -350,13 +367,13 @@ const start = async () => {
 
       socket.on('close', async () => {
         if (screenshotInterval) clearInterval(screenshotInterval);
-        if (browser) await browser.close().catch(() => {});
+        if (browserContext) await browserContext.close().catch(() => {});
         console.log(`[WS] Session ${sessionId} closed.`);
       });
 
       socket.on('error', () => {
         if (screenshotInterval) clearInterval(screenshotInterval);
-        browser?.close().catch(() => {});
+        browserContext?.close().catch(() => {});
       });
     });
 

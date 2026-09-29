@@ -44,6 +44,7 @@ export default function App() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [maxPages, setMaxPages] = useState(1);
   const [sameOriginOnly, setSameOriginOnly] = useState(true);
+  const [crawlSpeed, setCrawlSpeed] = useState<'slow' | 'medium' | 'fast'>('medium');
   const [targetSelector, setTargetSelector] = useState('');
   const [isPicking, setIsPicking] = useState(false);
   const [browserTab, setBrowserTab] = useState<BrowserTab>('interactive');
@@ -141,7 +142,7 @@ export default function App() {
     try {
       const res = await fetch('http://localhost:3000/api/jobs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ startUrl: targetUrl, filters, maxPages, sameOriginOnly, targetSelector: targetSelector.trim() || undefined })
+        body: JSON.stringify({ startUrl: targetUrl, filters, maxPages, sameOriginOnly, crawlSpeed, targetSelector: targetSelector.trim() || undefined })
       });
       const data = await res.json();
       setActiveJobId(data.id);
@@ -365,6 +366,17 @@ export default function App() {
                         ⚠️ {maxPages > 200 ? 'Very large crawl — may take 10–60 minutes.' : 'Large crawl — may take several minutes.'}
                       </div>
                     )}
+
+                    <label style={{ display: 'block', color: '#60a5fa', fontSize: '0.95rem', fontWeight: 'bold', marginBottom: '4px', marginTop: '16px' }}>🏃 Crawl Speed (Politeness)</label>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0 0 10px 0' }}>
+                      Fast speeds might trigger rate-limits or anti-bot protections.
+                    </p>
+                    <select className="input-glass" value={crawlSpeed} onChange={e => setCrawlSpeed(e.target.value as any)} style={{ width: '100%', marginBottom: '16px', padding: '8px', fontSize: '0.85rem' }}>
+                      <option value="slow">🐢 Slow & Polite (1 tab, 8s wait)</option>
+                      <option value="medium">🚶 Medium (3 tabs, 4s wait) - Default</option>
+                      <option value="fast">🚀 Fast & Aggressive (6 tabs, 1.5s wait)</option>
+                    </select>
+
                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
                       <input type="checkbox" checked={sameOriginOnly} onChange={e => setSameOriginOnly(e.target.checked)} style={{ accentColor: '#3b82f6' }} />
                       <span style={{ color: 'var(--text-muted)' }}>Stay on same domain only</span>

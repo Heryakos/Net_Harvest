@@ -32,7 +32,8 @@ export class JobRunner {
         const extractor = new Extractor();
 
         // Crawl one or many pages depending on user config
-        const rawUrls = await extractor.extractNetwork(url, 4000, crawlOptions);
+        const waitTime = crawlOptions.waitTimeMs || 4000;
+        const rawUrls = await extractor.extractNetwork(url, waitTime, crawlOptions);
 
         // Filter to only what the user wants
         const filterEngine = new URLFilter(filters || []);

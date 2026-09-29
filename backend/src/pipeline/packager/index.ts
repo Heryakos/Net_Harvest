@@ -15,6 +15,18 @@ export function buildJobZip(jobId: string): Promise<string> {
       "SELECT localPath, url FROM resources WHERE jobId = ? AND status = 'downloaded'"
     ).all(jobId) as { localPath: string, url: string }[];
 
+    const getFolderForExtension = (ext: string) => {
+      if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico'].includes(ext)) return 'images';
+      if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'videos';
+      if (['mp3', 'wav', 'ogg', 'aac'].includes(ext)) return 'audio';
+      if (['woff', 'woff2', 'ttf', 'otf', 'eot'].includes(ext)) return 'fonts';
+      if (['js', 'jsx', 'ts', 'tsx'].includes(ext)) return 'scripts';
+      if (['css', 'scss', 'sass', 'less'].includes(ext)) return 'styles';
+      if (['json', 'xml', 'csv', 'yaml', 'yml'].includes(ext)) return 'data';
+      if (['glb', 'gltf', 'obj', 'fbx'].includes(ext)) return '3d-models';
+      return 'other';
+    };
+
     if (!resources || resources.length === 0) {
       return reject(new Error('No downloaded files found for this job.'));
     }
@@ -34,14 +46,26 @@ export function buildJobZip(jobId: string): Promise<string> {
     archive.pipe(output);
 
     let added = 0;
+    let manifestCsv = "Original URL,Local Path\n";
+    
     for (const resource of resources) {
       if (resource.localPath && fs.existsSync(resource.localPath)) {
         const filename = resource.localPath.split(/[/\\]/).pop();
         if (filename) {
-          archive.file(resource.localPath, { name: filename });
+          const ext = filename.split('.').pop()?.toLowerCase() || '';
+          const folder = getFolderForExtension(ext);
+          const zipPath = `${folder}/${filename}`;
+          
+          archive.file(resource.localPath, { name: zipPath });
+          manifestCsv += `"${resource.url}","${zipPath}"\n`;
           added++;
         }
       }
+    }
+    
+    // Add the manifest file to the root of the ZIP
+    if (added > 0) {
+      archive.append(manifestCsv, { name: 'manifest.csv' });
     }
 
     if (added === 0) {
