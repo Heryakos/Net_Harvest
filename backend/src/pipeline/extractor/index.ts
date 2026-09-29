@@ -26,6 +26,8 @@ export interface CrawlOptions {
   onPageVisit?: (visited: number, total: number, url: string, resourcesFound: number) => void;
   /** Function to check if the job was cancelled */
   isCancelled?: () => boolean;
+  /** Seed URLs to start from (e.g., iframe pages captured from the current browser position) */
+  seedUrls?: string[];
 }
 
 export class Extractor {
@@ -57,7 +59,8 @@ export class Extractor {
       sameOriginOnly = true,
       concurrency = Math.min(3, maxPages),
       targetSelector,
-      onPageVisit
+      onPageVisit,
+      seedUrls
     } = options;
 
     console.log(`[Extractor] Crawling ${startUrl} — maxPages=${maxPages}, concurrency=${concurrency}`);
@@ -74,13 +77,42 @@ export class Extractor {
 
     const resourceUrls = new Set<string>();
     const visitedUrls = new Set<string>();
-    const pageQueue: string[] = [startUrl];
     let visitedCount = 0;
 
     let origin = '';
     try { origin = new URL(startUrl).origin; } catch {}
 
     const normalise = (url: string) => url.split('#')[0].split('?')[0];
+
+    // Detect sequential URL patterns like page0004.xhtml -> expand to page0004, page0005, ...pageN
+    const expandSequentialUrls = (urls: string[]): string[] => {
+      if (!urls.length) return urls;
+      for (const url of urls) {
+        // Match URLs ending in a zero-padded number before the extension, e.g. /Text/page0004.xhtml
+        const m = url.match(/^(https?:\/\/.+\/)([a-zA-Z_-]*)(\d{2,6})(\.[a-zA-Z0-9]+)$/);
+        if (!m) continue;
+        const [, baseDir, filePrefix, numStr, fileSuffix] = m;
+        const padLen = numStr.length;
+        const startNum = parseInt(numStr, 10);
+        const expanded: string[] = [];
+        for (let i = startNum; i < startNum + maxPages; i++) {
+          expanded.push(`${baseDir}${filePrefix}${String(i).padStart(padLen, '0')}${fileSuffix}`);
+        }
+        console.log(`[Extractor] Sequential pattern detected — generating ${expanded.length} page URLs from page ${startNum} onwards.`);
+        return expanded;
+      }
+      return urls; // no pattern found, return as-is
+    };
+
+    // Build initial queue: seed URLs (from browser capture) take priority over startUrl
+    let initialQueue: string[];
+    if (seedUrls && seedUrls.length > 0) {
+      console.log(`[Extractor] Using ${seedUrls.length} seed URLs from browser capture.`);
+      initialQueue = expandSequentialUrls(seedUrls);
+    } else {
+      initialQueue = [startUrl];
+    }
+    const pageQueue: string[] = [...initialQueue];
 
     const visitPage = async (url: string) => {
       const page = await context.newPage();

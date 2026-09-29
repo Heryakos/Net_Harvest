@@ -47,6 +47,7 @@ export default function App() {
   const [crawlSpeed, setCrawlSpeed] = useState<'slow' | 'medium' | 'fast'>('medium');
   const [targetSelector, setTargetSelector] = useState('');
   const [candidateSelectors, setCandidateSelectors] = useState<string[]>([]);
+  const [seedUrls, setSeedUrls] = useState<string[]>([]);
   const [isPicking, setIsPicking] = useState(false);
   const [browserTab, setBrowserTab] = useState<BrowserTab>('interactive');
   const [jobStatus, setJobStatus] = useState('');
@@ -143,7 +144,11 @@ export default function App() {
     try {
       const res = await fetch('http://localhost:3000/api/jobs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ startUrl: targetUrl, filters, maxPages, sameOriginOnly, crawlSpeed, targetSelector: targetSelector.trim() || undefined })
+        body: JSON.stringify({
+          startUrl: targetUrl, filters, maxPages, sameOriginOnly, crawlSpeed,
+          targetSelector: targetSelector.trim() || undefined,
+          seedUrls: seedUrls.length > 0 ? seedUrls : undefined
+        })
       });
       const data = await res.json();
       setActiveJobId(data.id);
@@ -194,6 +199,14 @@ export default function App() {
       }
       else if (msg.type === 'candidate_selectors') {
         setCandidateSelectors(msg.selectors);
+      }
+      else if (msg.type === 'iframe_srcs') {
+        if (msg.srcs && msg.srcs.length > 0) {
+          setSeedUrls(msg.srcs);
+          alert(`✅ Captured ${msg.srcs.length} page URLs from your current browser position!\n\nThe extraction will now start from this exact page and continue forward.\n\nFirst captured URL: ${msg.srcs[0]}`);
+        } else {
+          alert('⚠️ No iframes found on this page. Make sure the book page is loaded and try using a selector like #readium-right-content.');
+        }
       }
     };
     ws.onclose = () => { setWsConnected(false); setBrowserFrame(null); setWsLoading(false); setIsPicking(false); };
@@ -339,30 +352,49 @@ export default function App() {
 
               {showAdvanced && (
                 <div style={{ animation: 'fadeIn 0.2s ease' }}>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px', marginBottom: '6px' }}>
                     <span>🎯 Target Specific Section (Optional)</span>
-                    {wsConnected && (
-                      <button onClick={() => { 
-                        if (isPicking) {
-                          setIsPicking(false);
-                          sendWs({ type: 'clear_highlight' });
-                        } else {
-                          setIsPicking(true);
-                        }
-                      }} style={{
-                        background: isPicking ? 'rgba(239,68,68,0.3)' : 'rgba(59,130,246,0.2)', color: 'white', border: isPicking ? '1px solid rgba(239,68,68,0.5)' : 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer'
-                      }}>
-                        {isPicking ? 'Cancel Picking' : '🎯 Pick from Browser'}
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {wsConnected && (
+                        <>
+                          <button onClick={() => {
+                            if (isPicking) {
+                              setIsPicking(false);
+                              sendWs({ type: 'clear_highlight' });
+                            } else {
+                              setIsPicking(true);
+                            }
+                          }} style={{
+                            background: isPicking ? 'rgba(239,68,68,0.3)' : 'rgba(59,130,246,0.2)', color: 'white', border: isPicking ? '1px solid rgba(239,68,68,0.5)' : 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer'
+                          }}>
+                            {isPicking ? 'Cancel Picking' : '🎯 Pick from Browser'}
+                          </button>
+                          <button onClick={() => {
+                            sendWs({ type: 'get_iframe_srcs', selector: targetSelector.trim() || null });
+                          }} title="Capture the current book page positions from the browser and start extraction from there" style={{
+                            background: 'rgba(52,211,153,0.2)', color: '#34d399', border: '1px solid rgba(52,211,153,0.4)', borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer'
+                          }}>
+                            📌 Capture From Here
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </label>
                   <input list="candidate-selectors" className="input-glass" value={targetSelector} onChange={e => setTargetSelector(e.target.value)}
-                    placeholder="e.g. .card-container or #gallery" style={{ marginBottom: '20px' }} />
+                    placeholder="e.g. #readium-right-content or #gallery" style={{ marginBottom: seedUrls.length > 0 ? '8px' : '20px' }} />
                   <datalist id="candidate-selectors">
                     {candidateSelectors.map(s => <option key={s} value={s} />)}
                   </datalist>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '20px' }}>
-                    {isPicking ? <span style={{ color: '#60a5fa' }}>Hover over the interactive browser on the right and click the container you want.</span> : 'Pick from the dropdown, use the 🎯 Picker, or type a custom selector manually.'}
+                  {seedUrls.length > 0 && (
+                    <div style={{ padding: '8px 12px', background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', borderRadius: '6px', fontSize: '0.78rem', color: '#34d399', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>📌 Starting from page <b>{seedUrls[0].match(/(\d+)\.[a-z]+$/i)?.[1] || '?'}</b> — {seedUrls.length} seed URLs captured</span>
+                      <button onClick={() => setSeedUrls([])} style={{ background: 'transparent', border: 'none', color: '#34d399', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>✕</button>
+                    </div>
+                  )}
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: seedUrls.length > 0 ? '0' : '-12px', marginBottom: '20px' }}>
+                    {isPicking ? <span style={{ color: '#60a5fa' }}>Hover over the interactive browser on the right and click the container you want.</span>
+                      : seedUrls.length > 0 ? <span style={{ color: '#34d399' }}>✅ Extraction will start from your current browser position and generate sequential pages automatically.</span>
+                      : 'Navigate to your target page in the browser, then click 📌 Capture From Here to start from that exact position.'}
                   </p>
 
                   {/* Multi-page crawl */}

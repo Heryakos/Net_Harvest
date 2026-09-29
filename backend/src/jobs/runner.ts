@@ -29,7 +29,6 @@ export class JobRunner {
           db.prepare("UPDATE jobs SET stats = ? WHERE id = ?").run(JSON.stringify(stats), jobId);
         };
         
-        // Cancellation callback
         crawlOptions.isCancelled = () => {
           const job = db.prepare("SELECT status FROM jobs WHERE id = ?").get(jobId) as { status: string } | undefined;
           return job?.status === 'cancelled';
@@ -37,7 +36,7 @@ export class JobRunner {
 
         const extractor = new Extractor();
 
-        // Crawl one or many pages depending on user config
+        // Crawl using seedUrls if provided (from browser capture) or from startUrl
         const waitTime = crawlOptions.waitTimeMs || 4000;
         const rawUrls = await extractor.extractNetwork(url, waitTime, crawlOptions);
 

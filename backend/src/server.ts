@@ -23,7 +23,7 @@ fastify.get('/ping', async () => ({ status: 'ok' }));
 fastify.get('/api/jobs', async () => JobModel.getAllJobs());
 
 fastify.post('/api/jobs', async (request, reply) => {
-  const { startUrl, filters, maxPages, sameOriginOnly, targetSelector, crawlSpeed } = request.body as any;
+  const { startUrl, filters, maxPages, sameOriginOnly, targetSelector, crawlSpeed, seedUrls } = request.body as any;
   if (!startUrl) return reply.status(400).send({ error: 'startUrl is required' });
   const jobId = randomUUID();
   const job = JobModel.createJob(jobId, startUrl);
@@ -38,7 +38,8 @@ fastify.post('/api/jobs', async (request, reply) => {
     sameOriginOnly: sameOriginOnly !== false,
     targetSelector,
     waitTimeMs,
-    concurrency
+    concurrency,
+    seedUrls: seedUrls && seedUrls.length > 0 ? seedUrls : undefined
   });
   return reply.status(201).send(job);
 });
@@ -433,6 +434,22 @@ const start = async () => {
             case 'get_candidate_selectors':
               await sendCandidateSelectors();
               break;
+
+            case 'get_iframe_srcs': {
+              // Capture all iframe src URLs from the current page, optionally filtered by a selector
+              const iframeSrcs = await page!.evaluate((selector) => {
+                const root: Element | Document = selector ? (document.querySelector(selector) || document) : document;
+                const srcs: string[] = [];
+                root.querySelectorAll('iframe[src]').forEach((iframe: any) => {
+                  if (iframe.src && !iframe.src.startsWith('javascript:')) {
+                    srcs.push(iframe.src);
+                  }
+                });
+                return srcs;
+              }, msg.selector || null).catch(() => []);
+              send({ type: 'iframe_srcs', srcs: iframeSrcs, currentUrl: page!.url() });
+              break;
+            }
 
             case 'screenshot':
               await sendScreenshot();
