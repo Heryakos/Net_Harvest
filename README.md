@@ -20,14 +20,14 @@ Think of it as **"Save Page As" on steroids**, but with surgical precision over 
 
 ## ✨ Features
 
-- 🔍 **Real Network Interception** — Uses Playwright to capture ALL requests (not just `<img>` tags), exactly like Chrome DevTools Network tab
-- 🎛️ **Flexible Filter Rules** — Filter by file extension, URL contains, starts/ends with, or full Regex
-- 🔎 **Searchable Extension Dropdown** — Pre-loaded with 30+ common extensions (`.png`, `.glb`, `.gltf`, `.mp4`, `.woff2`, etc.)
-- 👁️ **Live Browser View** — See your target website rendered live inside the app while configuring filters
-- 🧪 **Live Network Tester** — Preview which files will be allowed/blocked before committing to a full extraction
-- 📦 **One-Click ZIP Download** — All captured resources packaged into a clean `.zip` archive
-- 🚦 **Job Queue** — Run multiple extractions with rate-limiting (max 4 concurrent downloads)
-- 💾 **SQLite Persistence** — All jobs and resource metadata stored locally
+- 🖱️ **Interactive Browser** — Log in to protected sites, click links, and navigate freely *before* extracting. The built-in browser streams directly to the UI.
+- 🎯 **Visual Element Picker** — Don't want the whole page? Just hover and click a specific gallery or card container in the Interactive Browser to extract only from that section!
+- 🔍 **Smart Auto-Detect** — Automatically scans the target page and suggests filters for all file types found (Images, Fonts, Media, Documents, etc.).
+- 🕷️ **Multi-Page Crawling** — Crawl up to 1000+ pages automatically. Uses concurrent browser tabs to speed up the process.
+- 📊 **Real-Time Tracking** — Watch the crawler progress live with a visual counter showing exactly how many real pages were discovered and scanned.
+- 🎛️ **Flexible Filter Rules** — Filter by file extension, URL contains, starts/ends with, or full Regex.
+- 📦 **One-Click ZIP Download** — All captured resources are instantly packaged into a clean `.zip` archive.
+- 💾 **SQLite Persistence** — All jobs and resource metadata are stored locally.
 
 ---
 
@@ -97,17 +97,21 @@ npm run dev
 ## 📖 How to Use
 
 ### Step 1 — Define Target
-Enter the URL of any website you want to extract from (e.g. `https://example.com`). The right panel will show a live preview of the site.
+Enter the URL of any website you want to extract from (e.g. `https://example.com`).
+- **Interactive Browser:** Click "Launch Browser" on the right panel. You can literally click links, log in, or solve captchas before starting the extraction.
+- **Target Specific Section:** Click the crosshair icon to visually pick a specific gallery or container from the Interactive Browser. NetHarvest will only extract files from inside that container.
+- **Multi-Page Crawl:** Choose how many pages to crawl automatically using the slider. 
 
 ### Step 2 — Set Filters
-Add filter rules to control which network requests to capture:
+Click **✨ Auto-Detect** to automatically find all file types currently on the page and add them as filters with one click.
+Alternatively, add manual rules:
 - **Include (ALL)** → Only download files matching ALL include rules
 - **Exclude (ANY)** → Skip files matching ANY exclude rule
 
-Use the **searchable dropdown** to pick file extensions, or type your own. Click **"Test Rules Live"** to do a dry run and preview what will be captured.
-
 ### Step 3 — Download
-Click **"▶ Start Extraction Job"** to begin. When complete, click **"📦 Download ZIP Archive"** to get all captured resources.
+Click **"▶ Start Extraction Job"** to begin. 
+- You will see a **live progress bar** showing exactly how many real pages are being crawled.
+- When complete, click **"📦 Download ZIP Archive"** to get all captured resources.
 
 ---
 
