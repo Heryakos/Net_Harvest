@@ -154,6 +154,16 @@ export default function App() {
     } catch { alert('Failed to start job.'); }
   };
 
+  const cancelJob = async () => {
+    if (!activeJobId) return;
+    if (!window.confirm('Are you sure you want to stop this extraction early? Any files already found will be saved in the ZIP.')) return;
+    try {
+      await fetch(`http://localhost:3000/api/jobs/${activeJobId}/cancel`, { method: 'POST' });
+      setJobStatus('cancelled');
+      setDownloadReady(true);
+    } catch { alert('Failed to cancel job.'); }
+  };
+
   // ── WebSocket Browser ────────────────────────────────────────────────────────
   const connectBrowser = useCallback(() => {
     wsRef.current?.close();
@@ -362,7 +372,7 @@ export default function App() {
                       <span style={{ color: '#60a5fa', fontWeight: 'bold', fontSize: '0.9rem' }}>{maxPagesDisplay}</span>
                     </div>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0 0 10px 0' }}>
-                      How many pages to crawl. 3 concurrent browser tabs run in parallel for speed.
+                      How many links to follow to find more pages. <b style={{ color: '#fbbf24' }}>Leave at 1 if you only want to download images from the current page.</b>
                     </p>
                     <input type="range" min={1} max={1000} value={maxPages} onChange={e => setMaxPages(Number(e.target.value))} style={{ width: '100%', marginBottom: '6px' }} />
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
@@ -543,12 +553,12 @@ export default function App() {
 
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.85rem' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Status</span>
-                <span style={{ fontWeight: 'bold', color: jobStatus === 'completed' ? '#4ade80' : jobStatus === 'failed' ? '#ef4444' : '#60a5fa', textTransform: 'capitalize' }}>
-                  {jobStatus === 'running' ? '⏳ Crawling...' : jobStatus === 'completed' ? '✅ Complete' : jobStatus === 'failed' ? '❌ Failed' : jobStatus}
+                <span style={{ fontWeight: 'bold', color: jobStatus === 'completed' ? '#4ade80' : jobStatus === 'failed' ? '#ef4444' : jobStatus === 'cancelled' ? '#f59e0b' : '#60a5fa', textTransform: 'capitalize' }}>
+                  {jobStatus === 'running' ? '⏳ Crawling...' : jobStatus === 'completed' ? '✅ Complete' : jobStatus === 'failed' ? '❌ Failed' : jobStatus === 'cancelled' ? '🛑 Stopped Early' : jobStatus}
                 </span>
               </div>
               <div style={{ height: '10px', background: 'rgba(15,23,42,0.8)', borderRadius: '6px', overflow: 'hidden', marginBottom: '20px' }}>
-                <div style={{ height: '100%', width: `${progressPct}%`, background: progressColor, transition: 'width 0.5s ease', animation: jobStatus === 'running' ? 'pulse 1.5s infinite' : 'none' }} />
+                <div style={{ height: '100%', width: `${progressPct}%`, background: jobStatus === 'cancelled' ? '#f59e0b' : progressColor, transition: 'width 0.5s ease', animation: jobStatus === 'running' ? 'pulse 1.5s infinite' : 'none' }} />
               </div>
 
               {!downloadReady && jobStatus === 'running' && (
@@ -558,8 +568,8 @@ export default function App() {
                   {jobStats && jobStats.crawled !== undefined && (
                     <div style={{ marginTop: '12px', padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', border: '1px solid rgba(59,130,246,0.2)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>Crawled {jobStats.crawled} pages</span>
-                        <span>(Max limit: {jobStats.max})</span>
+                        <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>Scanning Pages: {jobStats.crawled} / {jobStats.max}</span>
+                        <span style={{ color: '#34d399', fontWeight: 'bold' }}>Images Found: {jobStats.resourcesFound || 0}</span>
                       </div>
                       <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden', marginBottom: '6px' }}>
                         <div style={{ width: `${Math.min(100, (jobStats.crawled / (jobStats.max || 1)) * 100)}%`, height: '100%', background: '#60a5fa', transition: 'width 0.3s' }}></div>
@@ -570,15 +580,21 @@ export default function App() {
                     </div>
                   )}
                   {!jobStats && maxPages > 10 && <div style={{ marginTop: '8px' }}>Expect {Math.round(maxPages * 0.3 / 3)} – {Math.round(maxPages * 0.8 / 3)} minutes for {maxPages} pages.</div>}
+                  
+                  <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+                     <button onClick={cancelJob} style={{ background: 'transparent', color: '#ef4444', border: '1px solid rgba(239,68,68,0.5)', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                       🛑 Stop Job Early
+                     </button>
+                  </div>
                 </div>
               )}
 
-              {downloadReady && jobStatus === 'completed' && (
+              {downloadReady && (jobStatus === 'completed' || jobStatus === 'cancelled') && (
                 <div style={{ marginBottom: '12px' }}>
                   {jobStats && jobStats.crawled !== undefined && (
-                    <div style={{ marginBottom: '16px', padding: '12px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', fontSize: '0.85rem', color: '#10b981' }}>
-                      ✅ <b>Done!</b> We found and successfully crawled <b>{jobStats.crawled} real pages</b> on this site.
-                      {jobStats.crawled < (jobStats.max || 1) && ` (This is less than your ${jobStats.max} max limit because there were no more pages to find!)`}
+                    <div style={{ marginBottom: '16px', padding: '12px', background: jobStatus === 'cancelled' ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.1)', border: `1px solid ${jobStatus === 'cancelled' ? 'rgba(245,158,11,0.3)' : 'rgba(16,185,129,0.3)'}`, borderRadius: '8px', fontSize: '0.85rem', color: jobStatus === 'cancelled' ? '#fbbf24' : '#10b981' }}>
+                      {jobStatus === 'cancelled' ? '🛑 Stopped early!' : '✅ Done!'} We successfully scanned <b>{jobStats.crawled} pages</b> and found <b>{jobStats.resourcesFound || 0} files</b>.
+                      {(jobStatus === 'completed' && jobStats.crawled < (jobStats.max || 1)) && ` (This is less than your ${jobStats.max} max limit because there were no more links to find!)`}
                     </div>
                   )}
                   <button className="btn-primary"

@@ -23,7 +23,9 @@ export interface CrawlOptions {
   /** CSS selector of a specific element to scroll and extract from (e.g. .card-container) */
   targetSelector?: string;
   /** Called each time a new page is visited */
-  onPageVisit?: (visited: number, total: number, url: string) => void;
+  onPageVisit?: (visited: number, total: number, url: string, resourcesFound: number) => void;
+  /** Function to check if the job was cancelled */
+  isCancelled?: () => boolean;
 }
 
 export class Extractor {
@@ -83,6 +85,7 @@ export class Extractor {
     const visitPage = async (url: string) => {
       const page = await context.newPage();
 
+      // Track all network responses (images, scripts, media, etc.)
       page.on('response', response => {
         const u = response.url();
         if (u.startsWith('http')) resourceUrls.add(u);
@@ -92,7 +95,7 @@ export class Extractor {
         await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
         await page.waitForTimeout(waitTimeMs);
 
-        // Auto-scroll to trigger lazy-loaded content and infinite scrolls
+        // Auto-scroll to trigger lazy-loaded content
         await page.evaluate(async (selector) => {
           await new Promise<void>(resolve => {
             const scroller = selector ? document.querySelector(selector) : (document.scrollingElement || document.body);
@@ -101,19 +104,17 @@ export class Extractor {
             let lastHeight = scroller.scrollHeight;
             let unchangedCount = 0;
             const distance = 600;
-            const maxScrolls = 100; // Limit to prevent getting stuck forever
+            const maxScrolls = 100;
             let scrollCount = 0;
 
             const interval = setInterval(() => {
               scroller.scrollBy(0, distance);
-              // Also scroll window just in case
-              if (selector) window.scrollBy(0, distance); 
+              if (selector) window.scrollBy(0, distance);
               scrollCount++;
-              
+
               const newHeight = scroller.scrollHeight;
               if (newHeight === lastHeight) {
                 unchangedCount++;
-                // If height hasn't changed for 1.5 seconds (6 ticks of 250ms), we're done
                 if (unchangedCount >= 6 || scrollCount >= maxScrolls) {
                   clearInterval(interval);
                   scroller.scrollTo(0, 0);
@@ -121,68 +122,122 @@ export class Extractor {
                 }
               } else {
                 lastHeight = newHeight;
-                unchangedCount = 0; // Reset because we found new content
+                unchangedCount = 0;
               }
-            }, 250); // 250ms allows time for network fetches and DOM updates
+            }, 250);
           });
         }, targetSelector).catch(() => {});
 
         await page.waitForTimeout(800);
 
-        // If a targetSelector is provided, harvest URLs explicitly from its DOM
+        // ── Targeted DOM extraction ──────────────────────────────────────────
         if (targetSelector) {
-          const domUrls = await page.evaluate((selector) => {
+          const { domUrls, iframeSrcs } = await page.evaluate((selector) => {
             const el = document.querySelector(selector);
-            if (!el) return [];
+            if (!el) return { domUrls: [], iframeSrcs: [] };
+
             const urls: string[] = [];
-            
-            const extractFromNode = (root: Element | Document) => {
-              root.querySelectorAll<HTMLImageElement>('img').forEach(img => urls.push(img.src));
-              root.querySelectorAll<HTMLVideoElement>('video, source').forEach(v => urls.push(v.src));
-              root.querySelectorAll<HTMLAnchorElement>('a').forEach(a => urls.push(a.href));
+            const iframes: string[] = [];
+
+            const extractFromNode = (root: Element | Document, baseUrl: string) => {
+              root.querySelectorAll<HTMLImageElement>('img').forEach(img => {
+                if (img.src) urls.push(img.src);
+                if (img.dataset.src) urls.push(new URL(img.dataset.src, baseUrl).href);
+              });
+              root.querySelectorAll<HTMLVideoElement>('video, source').forEach(v => {
+                if (v.src) urls.push(v.src);
+              });
+              root.querySelectorAll<HTMLAnchorElement>('a').forEach(a => {
+                if (a.href && !a.href.startsWith('javascript:')) urls.push(a.href);
+              });
               root.querySelectorAll('*').forEach(child => {
                 const bg = window.getComputedStyle(child).backgroundImage;
                 if (bg && bg !== 'none') {
                   const match = bg.match(/url\(['"]?(.*?)['"]?\)/);
-                  if (match) urls.push(match[1]);
+                  if (match && match[1]) urls.push(new URL(match[1], baseUrl).href);
                 }
               });
-              
-              root.querySelectorAll('iframe').forEach(iframe => {
+
+              // Collect iframe srcs for later crawling instead of trying to pierce cross-origin iframes
+              root.querySelectorAll<HTMLIFrameElement>('iframe[src]').forEach(iframe => {
+                if (!iframe.src || iframe.src.startsWith('javascript:')) return;
                 try {
-                  const idoc = iframe.contentDocument || iframe.contentWindow?.document;
-                  if (idoc) extractFromNode(idoc);
+                  // Try same-origin pierce first
+                  const idoc = iframe.contentDocument || (iframe.contentWindow as any)?.document;
+                  if (idoc) {
+                    extractFromNode(idoc, iframe.src);
+                  } else {
+                    // Cross-origin: queue the iframe src as a page to visit
+                    iframes.push(iframe.src);
+                  }
                 } catch (e) {
-                  // ignore cross-origin iframes
+                  // Cross-origin: queue the iframe src as a page to visit
+                  iframes.push(iframe.src);
                 }
               });
             };
 
-            // If the selected element itself is an iframe, pierce it immediately
             if (el.tagName.toLowerCase() === 'iframe') {
-               const iframe = el as HTMLIFrameElement;
-               try {
-                 const idoc = iframe.contentDocument || iframe.contentWindow?.document;
-                 if (idoc) extractFromNode(idoc);
-               } catch (e) {}
+              const iframe = el as HTMLIFrameElement;
+              iframes.push(iframe.src);
             } else {
-               extractFromNode(el);
+              extractFromNode(el, location.href);
             }
-            
-            return urls.filter(Boolean);
-          }, targetSelector).catch(() => []);
+
+            return { domUrls: urls.filter(Boolean), iframeSrcs: iframes.filter(Boolean) };
+          }, targetSelector).catch(() => ({ domUrls: [], iframeSrcs: [] }));
 
           domUrls.forEach(u => {
             if (u.startsWith('http')) resourceUrls.add(u);
           });
+
+          // Queue iframe src pages so we visit them directly (handles cross-origin iframes)
+          for (const src of iframeSrcs) {
+            const norm = normalise(src);
+            if (!visitedUrls.has(norm) && !pageQueue.includes(norm)) {
+              console.log(`[Extractor] Queuing cross-origin iframe for direct visit: ${src}`);
+              pageQueue.push(norm);
+            }
+          }
         }
 
-        // Collect links for further crawling
+        // ── Extract images from xhtml / iframe pages (books, ebooks) ──────
+        // When we directly visit an xhtml page (e.g., from an iframe src),
+        // grab all img/source tags and resolve relative URLs against this page's URL
+        const isXhtmlOrEbookPage = url.match(/\.(xhtml|htm|html)$/i) || url.includes('/Text/') || url.includes('/OEBPS/');
+        if (isXhtmlOrEbookPage || !targetSelector) {
+          const xhtmlUrls = await page.evaluate((pageUrl) => {
+            const urls: string[] = [];
+            const base = document.querySelector('base')?.href || pageUrl;
+            document.querySelectorAll<HTMLImageElement>('img').forEach(img => {
+              if (img.src) urls.push(img.src);
+            });
+            document.querySelectorAll<HTMLSourceElement>('source').forEach(s => {
+              if (s.src) urls.push(s.src);
+            });
+            document.querySelectorAll<HTMLElement>('[style]').forEach(el => {
+              const bg = (el as HTMLElement).style.backgroundImage;
+              if (bg && bg !== 'none') {
+                const match = bg.match(/url\(['"]?(.*?)['"]?\)/);
+                if (match && match[1]) {
+                  try { urls.push(new URL(match[1], base).href); } catch {}
+                }
+              }
+            });
+            return urls.filter(Boolean);
+          }, url).catch(() => []);
+
+          xhtmlUrls.forEach(u => {
+            if (u.startsWith('http')) resourceUrls.add(u);
+          });
+        }
+
+        // ── Collect links for multi-page crawling ────────────────────────────
         if (maxPages > 1) {
           const links: string[] = await page.evaluate(() =>
             Array.from(document.querySelectorAll('a[href]'))
               .map((a: any) => a.href)
-              .filter((h: string) => h.startsWith('http'))
+              .filter((h: string) => h.startsWith('http') && !h.startsWith('javascript:'))
           ).catch(() => []);
 
           for (const link of links) {
@@ -206,11 +261,17 @@ export class Extractor {
       }
     };
 
+
     // Process queue with controlled concurrency
     const runQueue = async () => {
       const slots: Promise<void>[] = [];
 
       while (visitedCount < maxPages && (pageQueue.length > 0 || slots.length > 0)) {
+        if (options.isCancelled && options.isCancelled()) {
+          console.log(`[Extractor] Crawl cancelled, aborting queue.`);
+          break;
+        }
+
         // Fill available concurrency slots
         while (slots.length < concurrency && visitedCount < maxPages && pageQueue.length > 0) {
           const url = pageQueue.shift()!;
@@ -219,7 +280,7 @@ export class Extractor {
           visitedUrls.add(norm);
           visitedCount++;
 
-          onPageVisit?.(visitedCount, maxPages, url);
+          onPageVisit?.(visitedCount, maxPages, url, resourceUrls.size);
           console.log(`[Extractor] Visiting [${visitedCount}/${maxPages}]: ${url}`);
 
           const task = visitPage(url).then(() => {

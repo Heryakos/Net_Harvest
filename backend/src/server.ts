@@ -43,6 +43,18 @@ fastify.post('/api/jobs', async (request, reply) => {
   return reply.status(201).send(job);
 });
 
+// ─── Cancel Job ─────────────────────────────────────────────────────────────
+fastify.post('/api/jobs/:id/cancel', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  try {
+    const { db } = require('./db/index'); // dynamic require to avoid circular deps if any, or just import db at the top
+    db.prepare("UPDATE jobs SET status = 'cancelled' WHERE id = ?").run(id);
+    return reply.send({ success: true });
+  } catch (err: any) {
+    return reply.status(500).send({ error: err.message });
+  }
+});
+
 // ─── Download ZIP ─────────────────────────────────────────────────────────────
 fastify.get('/api/jobs/:id/download', async (request, reply) => {
   const { id } = request.params as { id: string };

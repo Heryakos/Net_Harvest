@@ -24,9 +24,15 @@ export class JobRunner {
     downloadQueue.add(async () => {
       try {
         // Update progress callback
-        crawlOptions.onPageVisit = (visited, total, currentUrl) => {
-          const stats = { crawled: visited, max: total, currentUrl };
+        crawlOptions.onPageVisit = (visited, total, currentUrl, resourcesFound) => {
+          const stats = { crawled: visited, max: total, currentUrl, resourcesFound };
           db.prepare("UPDATE jobs SET stats = ? WHERE id = ?").run(JSON.stringify(stats), jobId);
+        };
+        
+        // Cancellation callback
+        crawlOptions.isCancelled = () => {
+          const job = db.prepare("SELECT status FROM jobs WHERE id = ?").get(jobId) as { status: string } | undefined;
+          return job?.status === 'cancelled';
         };
 
         const extractor = new Extractor();
