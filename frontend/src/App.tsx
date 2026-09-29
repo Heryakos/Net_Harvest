@@ -51,6 +51,7 @@ export default function App() {
   const [downloadReady, setDownloadReady] = useState(false);
   const [jobStats, setJobStats] = useState<{ crawled?: number, max?: number, currentUrl?: string } | null>(null);
   const [isHovering, setIsHovering] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // WS Interactive browser
   const [wsConnected, setWsConnected] = useState(false);
@@ -315,52 +316,62 @@ export default function App() {
               <input className="input-glass" value={targetUrl} onChange={e => { setTargetUrl(e.target.value); setDetected(null); }}
                 placeholder="https://example.com" style={{ marginBottom: '16px' }} />
 
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span>🎯 Target Specific Section (Optional)</span>
-                {wsConnected && (
-                  <button onClick={() => { 
-                    if (isPicking) {
-                      setIsPicking(false);
-                      sendWs({ type: 'clear_highlight' });
-                    } else {
-                      setIsPicking(true);
-                    }
-                  }} style={{
-                    background: isPicking ? 'rgba(239,68,68,0.3)' : 'rgba(59,130,246,0.2)', color: 'white', border: isPicking ? '1px solid rgba(239,68,68,0.5)' : 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer'
-                  }}>
-                    {isPicking ? 'Cancel Picking' : '🎯 Pick from Browser'}
-                  </button>
-                )}
-              </label>
-              <input className="input-glass" value={targetSelector} onChange={e => setTargetSelector(e.target.value)}
-                placeholder="e.g. .card-container or #gallery" style={{ marginBottom: '20px' }} />
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '20px' }}>
-                {isPicking ? <span style={{ color: '#60a5fa' }}>Hover over the interactive browser on the right and click the container you want.</span> : 'Only scroll and extract images/media from this specific CSS selector instead of the whole page.'}
-              </p>
-
-              {/* Multi-page crawl */}
-              <div style={{ padding: '16px', background: 'rgba(59,130,246,0.06)', borderRadius: '10px', border: '1px solid rgba(59,130,246,0.2)', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <h3 style={{ margin: 0, color: '#60a5fa', fontSize: '0.95rem' }}>🔗 Multi-Page Crawl</h3>
-                  <span style={{ color: '#60a5fa', fontWeight: 'bold', fontSize: '0.9rem' }}>{maxPagesDisplay}</span>
-                </div>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0 0 10px 0' }}>
-                  How many pages to crawl. 3 concurrent browser tabs run in parallel for speed.
-                </p>
-                <input type="range" min={1} max={1000} value={maxPages} onChange={e => setMaxPages(Number(e.target.value))} style={{ width: '100%', marginBottom: '6px' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
-                  <span>1</span><span>100</span><span>500</span><span>1000</span>
-                </div>
-                {maxPages > 50 && (
-                  <div style={{ padding: '8px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '6px', fontSize: '0.8rem', color: '#fbbf24', marginBottom: '10px' }}>
-                    ⚠️ {maxPages > 200 ? 'Very large crawl — may take 10–60 minutes.' : 'Large crawl — may take several minutes.'}
-                  </div>
-                )}
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
-                  <input type="checkbox" checked={sameOriginOnly} onChange={e => setSameOriginOnly(e.target.checked)} style={{ accentColor: '#3b82f6' }} />
-                  <span style={{ color: 'var(--text-muted)' }}>Stay on same domain only</span>
-                </label>
+              <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+                <button onClick={() => setShowAdvanced(!showAdvanced)} style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', color: '#60a5fa', fontSize: '0.8rem', padding: '6px 16px', borderRadius: '20px', cursor: 'pointer', transition: 'all 0.2s' }}>
+                  {showAdvanced ? '▼ Hide Advanced Settings' : '▶ Show Advanced Settings'}
+                </button>
               </div>
+
+              {showAdvanced && (
+                <div style={{ animation: 'fadeIn 0.2s ease' }}>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span>🎯 Target Specific Section (Optional)</span>
+                    {wsConnected && (
+                      <button onClick={() => { 
+                        if (isPicking) {
+                          setIsPicking(false);
+                          sendWs({ type: 'clear_highlight' });
+                        } else {
+                          setIsPicking(true);
+                        }
+                      }} style={{
+                        background: isPicking ? 'rgba(239,68,68,0.3)' : 'rgba(59,130,246,0.2)', color: 'white', border: isPicking ? '1px solid rgba(239,68,68,0.5)' : 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer'
+                      }}>
+                        {isPicking ? 'Cancel Picking' : '🎯 Pick from Browser'}
+                      </button>
+                    )}
+                  </label>
+                  <input className="input-glass" value={targetSelector} onChange={e => setTargetSelector(e.target.value)}
+                    placeholder="e.g. .card-container or #gallery" style={{ marginBottom: '20px' }} />
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '20px' }}>
+                    {isPicking ? <span style={{ color: '#60a5fa' }}>Hover over the interactive browser on the right and click the container you want.</span> : 'Only scroll and extract images/media from this specific CSS selector instead of the whole page.'}
+                  </p>
+
+                  {/* Multi-page crawl */}
+                  <div style={{ padding: '16px', background: 'rgba(59,130,246,0.06)', borderRadius: '10px', border: '1px solid rgba(59,130,246,0.2)', marginBottom: '20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <h3 style={{ margin: 0, color: '#60a5fa', fontSize: '0.95rem' }}>🔗 Multi-Page Crawl</h3>
+                      <span style={{ color: '#60a5fa', fontWeight: 'bold', fontSize: '0.9rem' }}>{maxPagesDisplay}</span>
+                    </div>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0 0 10px 0' }}>
+                      How many pages to crawl. 3 concurrent browser tabs run in parallel for speed.
+                    </p>
+                    <input type="range" min={1} max={1000} value={maxPages} onChange={e => setMaxPages(Number(e.target.value))} style={{ width: '100%', marginBottom: '6px' }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
+                      <span>1</span><span>100</span><span>500</span><span>1000</span>
+                    </div>
+                    {maxPages > 50 && (
+                      <div style={{ padding: '8px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '6px', fontSize: '0.8rem', color: '#fbbf24', marginBottom: '10px' }}>
+                        ⚠️ {maxPages > 200 ? 'Very large crawl — may take 10–60 minutes.' : 'Large crawl — may take several minutes.'}
+                      </div>
+                    )}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                      <input type="checkbox" checked={sameOriginOnly} onChange={e => setSameOriginOnly(e.target.checked)} style={{ accentColor: '#3b82f6' }} />
+                      <span style={{ color: 'var(--text-muted)' }}>Stay on same domain only</span>
+                    </label>
+                  </div>
+                </div>
+              )}
 
               <button className="btn-primary" style={{ width: '100%' }} onClick={() => setStep(2)}>
                 Next: Configure Filters ➔
