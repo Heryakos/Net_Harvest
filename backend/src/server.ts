@@ -23,9 +23,9 @@ fastify.get('/ping', async () => ({ status: 'ok' }));
 fastify.get('/api/jobs', async () => JobModel.getAllJobs());
 
 fastify.post('/api/jobs', async (request, reply) => {
-  const { startUrl, filters, maxPages, sameOriginOnly, targetSelector, crawlSpeed, seedUrls, directResourceUrls, sessionCookies } = request.body as any;
+  const { startUrl, filters, maxPages, sameOriginOnly, targetSelector, crawlSpeed, seedUrls, directResourceUrls, sessionCookies, jobId: reqJobId } = request.body as any;
   if (!startUrl) return reply.status(400).send({ error: 'startUrl is required' });
-  const jobId = randomUUID();
+  const jobId = reqJobId || randomUUID();
   const job = JobModel.createJob(jobId, startUrl);
 
   let waitTimeMs = 4000;
@@ -247,13 +247,7 @@ const start = async () => {
           await popup.close().catch(() => {});
         });
 
-        page.on('response', response => {
-          const u = response.url();
-          const contentType = response.headers()['content-type'] || '';
-          if (u.startsWith('http')) {
-            sessionResources.set(u, contentType);
-          }
-        });
+
 
         await page.goto(url, { waitUntil: 'load', timeout: 30000 }).catch(() => {});
         screenshotInterval = setInterval(sendScreenshot, 200); // 5fps
@@ -460,46 +454,134 @@ const start = async () => {
             }
 
             
-            case 'start_recording':
-              if (recordInterval) clearInterval(recordInterval);
-              // Don't clear sessionResources - they accumulate from page load onwards
-              // But do snapshot how many we had before, to show only newly captured
-              const baselineCount = sessionResources.size;
-              send({ type: 'recording_status', count: 0 });
+            case 'start_recording': {
+              if (!page) return;
+              const targetSelector = msg.targetSelector || 'body';
               
-              recordInterval = setInterval(async () => {
-                if (!page) return;
+              const el = await page.$(targetSelector);
+              if (!el) {
+                send({ type: 'error', message: Selector not found on page:  });
+                return;
+              }
+
+              if (recordInterval) clearInterval(recordInterval);
+              
+              const recordingJobId = msg.jobId || 'interactive_' + Date.now();
+              const destDir = require('path').join(process.cwd(), 'data', 'downloads', recordingJobId, 'screenshots');
+              require('fs').mkdirSync(destDir, { recursive: true });
+
+              let lastHash = '';
+              let pageCount = 0;
+              let isCapturing = false;
+              recordedUrls.clear();
+
+              send({ type: 'recording_status', count: 0, screenshots: 0, jobId: recordingJobId });
+
+              const crypto = require('crypto');
+              const captureFrame = async () => {
+                if (isCapturing || !page) return;
+                isCapturing = true;
                 try {
-                  // Capture ALL session resources seen while recording.
-                  // The frontend will apply the user's active filters before downloading.
-                  const imageUrls = Array.from(sessionResources.keys());
+                  const element = await page.$(targetSelector);
+                  if (!element) return;
                   
-                  // Update recordedUrls with all URLs seen so far
-                  const prevSize = recordedUrls.size;
-                  imageUrls.forEach(u => recordedUrls.add(u));
+                  const screenshotBuf = await element.screenshot();
+                  const hash = crypto.createHash('sha256').update(screenshotBuf).digest('hex');
+                  if (hash === lastHash) return; // deduplicate
+                  lastHash = hash;
                   
-                  if (recordedUrls.size !== prevSize) {
-                    console.log(`[Recording] ${recordedUrls.size} images captured (network). Latest: ${imageUrls.slice(-2).join(', ')}`);
-                    send({ type: 'recording_status', count: recordedUrls.size });
+                  pageCount++;
+                  const filename = page-.png;
+                  require('fs').writeFileSync(require('path').join(destDir, filename), screenshotBuf);
+                  
+                  // Extract assets scoped to element
+                  const result = await page.evaluate(async (sel) => {
+                    const root = document.querySelector(sel);
+                    if (!root) return { urls: [], html: '' };
+                    
+                    const urls = new Set<string>();
+                    
+                    const getComputedImages = (node: Element) => {
+                      const style = window.getComputedStyle(node);
+                      const bg = style.backgroundImage;
+                      if (bg && bg !== 'none') {
+                        const match = bg.match(/url\(['"]?(.*?)['"]?\)/);
+                        if (match) urls.add(match[1]);
+                      }
+                    };
+                    
+                    const walk = (node: Node) => {
+                      if (node.nodeType === Node.ELEMENT_NODE) {
+                        const el = node as Element;
+                        if (el.tagName.toLowerCase() === 'img') {
+                          const img = el as HTMLImageElement;
+                          if (img.src) urls.add(img.src);
+                          if (img.srcset) {
+                            img.srcset.split(',').forEach(s => {
+                              const u = s.trim().split(' ')[0];
+                              if (u) urls.add(u);
+                            });
+                          }
+                        }
+                        getComputedImages(el);
+                        if (el.shadowRoot) walk(el.shadowRoot);
+                        for (let i = 0; i < el.children.length; i++) walk(el.children[i]);
+                      }
+                    };
+                    walk(root);
+                    
+                    // Resolve blobs
+                    const resolvedUrls = [];
+                    for (const u of Array.from(urls)) {
+                      if (u.startsWith('blob:')) {
+                        try {
+                          const res = await fetch(u);
+                          const blob = await res.blob();
+                          const reader = new FileReader();
+                          const dataUrl = await new Promise<string>(resolve => {
+                            reader.onloadend = () => resolve(reader.result as string);
+                            reader.readAsDataURL(blob);
+                          });
+                          resolvedUrls.push(dataUrl);
+                        } catch(e) {}
+                      } else {
+                        resolvedUrls.push(u);
+                      }
+                    }
+                    
+                    return { urls: resolvedUrls, html: root.innerHTML };
+                  }, targetSelector);
+                  
+                  result.urls.forEach((u: string) => recordedUrls.add(u));
+                  if (result.html) {
+                    const htmlFilename = "page-${String(pageCount).padStart(4, '0')}.xhtml";
+                    require('fs').writeFileSync(require('path').join(destDir, htmlFilename), result.html);
                   }
-                } catch(e: any) { console.error('[Recording error]', e.message); }
-              }, 800);
+                  send({ type: 'recording_status', count: recordedUrls.size, screenshots: pageCount, jobId: recordingJobId });
+                } catch(e) {
+                   console.error('[Capture Error]', e);
+                } finally {
+                  isCapturing = false;
+                }
+              };
+
+              recordInterval = setInterval(captureFrame, 300);
+              captureFrame();
               break;
-              case 'stop_recording':
+            }
+            case 'stop_recording':
               if (recordInterval) clearInterval(recordInterval);
               recordInterval = null;
               break;
               
             case 'get_recorded': {
-              // Grab cookies NOW while the browser is still open
               let sessionCookies = '';
               try {
                 if (browserContext) {
                   const cookieList = await browserContext.cookies();
-                  sessionCookies = cookieList.map((c: any) => `=`).join('; ');
-                  console.log(`[Recording] Captured  cookies for download auth.`);
+                  sessionCookies = cookieList.map((c: any) => ${c.name}=).join('; ');
                 }
-              } catch(e: any) { console.warn('[Recording] Could not get cookies:', e.message); }
+              } catch(e: any) {}
               send({ type: 'recorded_urls', urls: Array.from(recordedUrls), cookies: sessionCookies });
               break;
             }

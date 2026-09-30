@@ -58,6 +58,8 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordedCount, setRecordedCount] = useState(0);
   const [recordedUrls, setRecordedUrls] = useState<string[] | null>(null);
+  const [recordedJobId, setRecordedJobId] = useState<string>('');
+  const [recordedScreenshots, setRecordedScreenshots] = useState<number>(0);
   const [recordedCookies, setRecordedCookies] = useState<string>('');
 
   // WS Interactive browser
@@ -157,7 +159,8 @@ export default function App() {
           targetSelector: targetSelector.trim() || undefined,
           seedUrls: seedUrls.length > 0 ? seedUrls : undefined,
           directResourceUrls: recordedUrls || undefined,
-          sessionCookies: recordedCookies || undefined
+          sessionCookies: recordedCookies || undefined,
+          jobId: recordedJobId || undefined
         })
       });
       const data = await res.json();
@@ -233,6 +236,8 @@ export default function App() {
       }
       else if (msg.type === 'recording_status') {
         setRecordedCount(msg.count);
+        if (msg.jobId) setRecordedJobId(msg.jobId);
+        if (msg.screenshots !== undefined) setRecordedScreenshots(msg.screenshots);
       }
       else if (msg.type === 'recorded_urls') {
         const urls = msg.urls;
@@ -645,6 +650,11 @@ export default function App() {
 
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)', flex: 1 }} onClick={() => setStep(1)}>← Back</button>
+                {recordedUrls && (
+                  <div style={{ padding: '12px', background: 'rgba(52,211,153,0.1)', borderRadius: '8px', marginBottom: '16px', fontSize: '0.85rem', color: '#10b981', border: '1px solid rgba(52,211,153,0.3)' }}>
+                    <b>About to download:</b> {recordedScreenshots} page screenshots (page-0001.png, etc) + {recordedUrls.length} extracted assets.
+                  </div>
+                )}
                 <button className="btn-primary" style={{ flex: 2 }} onClick={startJob}>▶ Start Extraction</button>
               </div>
             </div>

@@ -1,4 +1,4 @@
-export type FilterType = 'contains' | 'starts_with' | 'ends_with' | 'extension' | 'regex';
+﻿export type FilterType = 'contains' | 'starts_with' | 'ends_with' | 'extension' | 'regex';
 
 export interface FilterRule {
   type: FilterType;
@@ -58,6 +58,16 @@ export class URLFilter {
       case 'extension': 
         const ext = rule.value.startsWith('.') ? rule.value : `.${rule.value}`;
         try {
+          if (urlStr.startsWith('data:')) {
+            const mimeMatch = urlStr.match(/^data:(.*?);/);
+            if (mimeMatch) {
+              const mime = mimeMatch[1].toLowerCase();
+              const targetExt = ext.replace('.', '').toLowerCase();
+              if (mime.includes(targetExt)) return true;
+              if (targetExt === 'jpg' && mime.includes('jpeg')) return true;
+            }
+            return false;
+          }
           const parsed = new URL(urlStr);
           return parsed.pathname.toLowerCase().endsWith(ext.toLowerCase());
         } catch {
