@@ -242,12 +242,13 @@ export default function App() {
       else if (msg.type === 'recorded_urls') {
         const urls = msg.urls;
         const cookies = msg.cookies || '';
-        if (urls && urls.length > 0) {
-          setRecordedUrls(urls);
+        // Even if no assets are found (urls empty), we still proceed if screenshots were taken
+        if ((urls && urls.length > 0) || recordedScreenshots > 0) {
+          setRecordedUrls(urls || []);
           setRecordedCookies(cookies);
           setStep(2);
         } else {
-          alert('No resources were captured while recording!');
+          alert('No screenshots or resources were captured while recording! Try scrolling or flipping pages.');
         }
       }
     };
@@ -442,7 +443,7 @@ export default function App() {
 
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '20px' }}>
                     {isPicking ? <span style={{ color: '#60a5fa' }}>Hover over the interactive browser on the right and click the container you want.</span>
-                      : isRecording ? <span style={{ color: '#ef4444' }}>🔴 Recording in progress... Please flip through the pages in the browser! ({recordedCount} captured)</span>
+                      : isRecording ? <span style={{ color: '#ef4444' }}>🔴 Recording in progress... Please flip through the pages in the browser! ({recordedScreenshots} frames, {recordedCount} assets)</span>
                       : 'Navigate to your target page in the browser, then click 🔴 Record While Scrolling to manually capture pages as you read.'}
                   </p>
 
