@@ -48,6 +48,10 @@ export class JobRunner {
             cookies = crawlOptions.sessionCookies;
             console.log(`[JobRunner] Used ${cookies.split(';').length} cookies provided by live session for auth.`);
           }
+          
+          // Artificially update stats so the frontend knows we successfully "crawled" the captured urls
+          const stats = { crawled: imageUrls.length, max: imageUrls.length, currentUrl: 'Interactive Browser Capture', resourcesFound: imageUrls.length };
+          db.prepare("UPDATE jobs SET stats = ? WHERE id = ?").run(JSON.stringify(stats), jobId);
         } else {
           // Normal crawl
           const waitTime = crawlOptions.waitTimeMs || 4000;

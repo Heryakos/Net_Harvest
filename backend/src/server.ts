@@ -170,7 +170,7 @@ const start = async () => {
       let page: Page | null = null;
       let screenshotInterval: NodeJS.Timeout | null = null;
       let recordInterval: NodeJS.Timeout | null = null;
-      const sessionResources = new Set<string>();
+      const sessionResources = new Map<string, string>();
       const recordedUrls = new Set<string>();
 
       const send = (msg: object) => {
@@ -249,7 +249,10 @@ const start = async () => {
 
         page.on('response', response => {
           const u = response.url();
-          if (u.startsWith('http')) sessionResources.add(u);
+          const contentType = response.headers()['content-type'] || '';
+          if (u.startsWith('http')) {
+            sessionResources.set(u, contentType);
+          }
         });
 
         await page.goto(url, { waitUntil: 'load', timeout: 30000 }).catch(() => {});
@@ -433,7 +436,7 @@ const start = async () => {
               break;
 
             case 'get_resources':
-              send({ type: 'resources', resources: Array.from(sessionResources) });
+              send({ type: 'resources', resources: Array.from(sessionResources.keys()) });
               break;
 
             case 'get_candidate_selectors':
@@ -467,14 +470,17 @@ const start = async () => {
               recordInterval = setInterval(async () => {
                 if (!page) return;
                 try {
-                  // Filter sessionResources to only image-like URLs
+                  // Filter sessionResources to only image-like URLs OR actual image content-types
                   const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.avif'];
-                  const imageUrls = Array.from(sessionResources).filter(u => {
-                    try {
-                      const path = new URL(u).pathname.toLowerCase();
-                      return IMAGE_EXTS.some(ext => path.endsWith(ext));
-                    } catch { return false; }
-                  });
+                  const imageUrls = Array.from(sessionResources.entries())
+                    .filter(([url, contentType]) => {
+                      if (contentType.startsWith('image/')) return true;
+                      try {
+                        const path = new URL(url).pathname.toLowerCase();
+                        return IMAGE_EXTS.some(ext => path.endsWith(ext));
+                      } catch { return false; }
+                    })
+                    .map(([url, _]) => url);
                   
                   // Update recordedUrls with all image URLs seen so far
                   const prevSize = recordedUrls.size;
