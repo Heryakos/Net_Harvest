@@ -454,135 +454,31 @@ const start = async () => {
             }
 
             
-            case 'start_recording': {
-              if (!page) return;
-              const targetSelector = msg.targetSelector || 'body';
-              
-              const el = await page.$(targetSelector);
-              if (!el) {
-                send({ type: 'error', message: `Selector not found on page: ${targetSelector}` });
+            case 'capture_visible_spread': {
+              if (!page) {
+                send({ type: 'error', message: 'No active browser page' });
                 return;
               }
-
-              if (recordInterval) clearInterval(recordInterval);
+              const { CambridgeReaderEngine } = require('./engine');
+              const engine = new CambridgeReaderEngine(page);
+              engine.selector = msg.targetSelector || '#readium-right-content';
               
-              const recordingJobId = msg.jobId || 'interactive_' + Date.now();
-              const destDir = require('path').join(process.cwd(), 'data', 'downloads', recordingJobId, 'screenshots');
-              require('fs').mkdirSync(destDir, { recursive: true });
-
-              let lastHash = '';
-              let pageCount = 0;
-              let isCapturing = false;
-              recordedUrls.clear();
-
-              send({ type: 'recording_status', count: 0, screenshots: 0, jobId: recordingJobId });
-
-              const crypto = require('crypto');
-              const captureFrame = async () => {
-                if (isCapturing || !page) return;
-                isCapturing = true;
-                try {
-                  const element = await page.$(targetSelector);
-                  if (!element) return;
-                  
-                  const screenshotBuf = await element.screenshot();
-                  const hash = crypto.createHash('sha256').update(screenshotBuf).digest('hex');
-                  if (hash === lastHash) return; // deduplicate
-                  lastHash = hash;
-                  
-                  pageCount++;
-                  const filename = `page-${String(pageCount).padStart(4, '0')}.png`;
-                  require('fs').writeFileSync(require('path').join(destDir, filename), screenshotBuf);
-                  
-                  // Extract assets scoped to element
-                  const result = await page.evaluate(async (sel) => {
-                    const root = document.querySelector(sel);
-                    if (!root) return { urls: [], html: '' };
-                    
-                    const urls = new Set<string>();
-                    
-                    const getComputedImages = (node: Element) => {
-                      const style = window.getComputedStyle(node);
-                      const bg = style.backgroundImage;
-                      if (bg && bg !== 'none') {
-                        const match = bg.match(/url\(['"]?(.*?)['"]?\)/);
-                        if (match) urls.add(match[1]);
-                      }
-                    };
-                    
-                    const walk = (node: Node) => {
-                      if (node.nodeType === Node.ELEMENT_NODE) {
-                        const el = node as Element;
-                        if (el.tagName.toLowerCase() === 'img') {
-                          const img = el as HTMLImageElement;
-                          if (img.src) urls.add(img.src);
-                          if (img.srcset) {
-                            img.srcset.split(',').forEach(s => {
-                              const u = s.trim().split(' ')[0];
-                              if (u) urls.add(u);
-                            });
-                          }
-                        }
-                        getComputedImages(el);
-                        if (el.shadowRoot) walk(el.shadowRoot);
-                        for (let i = 0; i < el.children.length; i++) walk(el.children[i]);
-                      }
-                    };
-                    walk(root);
-                    
-                    // Resolve blobs
-                    const resolvedUrls = [];
-                    for (const u of Array.from(urls)) {
-                      if (u.startsWith('blob:')) {
-                        try {
-                          const res = await fetch(u);
-                          const blob = await res.blob();
-                          const reader = new FileReader();
-                          const dataUrl = await new Promise<string>(resolve => {
-                            reader.onloadend = () => resolve(reader.result as string);
-                            reader.readAsDataURL(blob);
-                          });
-                          resolvedUrls.push(dataUrl);
-                        } catch(e) {}
-                      } else {
-                        resolvedUrls.push(u);
-                      }
-                    }
-                    
-                    return { urls: resolvedUrls, html: root.innerHTML };
-                  }, targetSelector);
-                  
-                  result.urls.forEach((u: string) => recordedUrls.add(u));
-                  if (result.html) {
-                    const htmlFilename = `page-${String(pageCount).padStart(4, '0')}.xhtml`;
-                    require('fs').writeFileSync(require('path').join(destDir, htmlFilename), result.html);
-                  }
-                  send({ type: 'recording_status', count: recordedUrls.size, screenshots: pageCount, jobId: recordingJobId });
-                } catch(e) {
-                   console.error('[Capture Error]', e);
-                } finally {
-                  isCapturing = false;
-                }
-              };
-
-              recordInterval = setInterval(captureFrame, 300);
-              captureFrame();
-              break;
-            }
-            case 'stop_recording':
-              if (recordInterval) clearInterval(recordInterval);
-              recordInterval = null;
-              break;
+              const jobId = msg.jobId || 'interactive_' + Date.now();
+              const destDir = require('path').join(process.cwd(), 'data', 'downloads', jobId);
               
-            case 'get_recorded': {
-              let sessionCookies = '';
+              send({ type: 'capture_log', log: `Starting capture on selector: ${engine.selector}` });
+              
               try {
-                if (browserContext) {
-                  const cookieList = await browserContext.cookies();
-                  sessionCookies = cookieList.map((c: any) => `${c.name}=${c.value}`).join('; ');
-                }
-              } catch(e: any) {}
-              send({ type: 'recorded_urls', urls: Array.from(recordedUrls), cookies: sessionCookies });
+                const results = await engine.captureVisibleSpread(destDir, (progress: string) => {
+                  send({ type: 'capture_log', log: progress });
+                });
+                
+                send({ type: 'capture_log', log: `Successfully extracted ${results.length} pages!` });
+                send({ type: 'capture_success', results, jobId });
+              } catch (e: any) {
+                send({ type: 'capture_log', log: `ERROR: ${e.message}` });
+                send({ type: 'error', message: e.message });
+              }
               break;
             }
 

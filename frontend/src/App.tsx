@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './index.css';
 import { FilterGuide } from './components/FilterGuide';
 import CreatableSelect from 'react-select/creatable';
@@ -55,12 +55,10 @@ export default function App() {
   const [jobStats, setJobStats] = useState<{ crawled?: number, max?: number, currentUrl?: string, resourcesFound?: number } | null>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordedCount, setRecordedCount] = useState(0);
-  const [recordedUrls, setRecordedUrls] = useState<string[] | null>(null);
-  const [recordedJobId, setRecordedJobId] = useState<string>('');
-  const [recordedScreenshots, setRecordedScreenshots] = useState<number>(0);
-  const [recordedCookies, setRecordedCookies] = useState<string>('');
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [captureLogs, setCaptureLogs] = useState<string[]>([]);
+  const [captureResults, setCaptureResults] = useState<any[] | null>(null);
+  const [captureJobId, setCaptureJobId] = useState<string>('');
 
   // WS Interactive browser
   const [wsConnected, setWsConnected] = useState(false);
@@ -155,12 +153,11 @@ export default function App() {
       const res = await fetch('http://localhost:3000/api/jobs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          startUrl: targetUrl, filters, maxPages: recordedUrls ? recordedUrls.length : maxPages, sameOriginOnly, crawlSpeed,
+          startUrl: targetUrl, filters, maxPages: captureResults ? captureResults.length : maxPages, sameOriginOnly, crawlSpeed,
           targetSelector: targetSelector.trim() || undefined,
           seedUrls: seedUrls.length > 0 ? seedUrls : undefined,
-          directResourceUrls: recordedUrls || undefined,
-          sessionCookies: recordedCookies || undefined,
-          jobId: recordedJobId || undefined
+          directResourceUrls: captureJobId ? [] : undefined,
+          jobId: captureJobId || undefined
         })
       });
       const data = await res.json();
@@ -229,27 +226,19 @@ export default function App() {
           });
           // Also show advanced settings so user can see what changed
           setShowAdvanced(true);
-          alert(`✅ Captured ${msg.srcs.length} page URLs from your current browser position!\n\nFilters have been auto-set to: jpg, jpeg, png, gif, webp\n\nNow click "▶ Start Extraction" to begin.`);
+          alert(`✅ Captured ${msg.srcs.length} page URLs from your current browser position!\n\nFilters have been auto-set to: jpg, jpeg, png, gif, webp\n\nNow click "📦 Package to ZIP" to begin.`);
         } else {
           alert('⚠️ No iframes found on this page.\n\nMake sure:\n1. The book page is fully loaded\n2. You have the correct selector in the Target section (try #readium-right-content)\n3. The interactive browser is connected');
         }
       }
-      else if (msg.type === 'recording_status') {
-        setRecordedCount(msg.count);
-        if (msg.jobId) setRecordedJobId(msg.jobId);
-        if (msg.screenshots !== undefined) setRecordedScreenshots(msg.screenshots);
+      else if (msg.type === 'capture_log') {
+        setCaptureLogs(prev => [...prev, msg.log]);
       }
-      else if (msg.type === 'recorded_urls') {
-        const urls = msg.urls;
-        const cookies = msg.cookies || '';
-        // Even if no assets are found (urls empty), we still proceed if screenshots were taken
-        if ((urls && urls.length > 0) || recordedScreenshots > 0) {
-          setRecordedUrls(urls || []);
-          setRecordedCookies(cookies);
-          setStep(2);
-        } else {
-          alert('No screenshots or resources were captured while recording! Try scrolling or flipping pages.');
-        }
+      else if (msg.type === 'capture_success') {
+        setCaptureResults(msg.results);
+        setCaptureJobId(msg.jobId);
+        setIsCapturing(false);
+        setStep(2);
       }
     };
     ws.onclose = () => { setWsConnected(false); setBrowserFrame(null); setWsLoading(false); setIsPicking(false); };
@@ -413,23 +402,18 @@ export default function App() {
                             {isPicking ? 'Cancel Picking' : '🎯 Pick from Browser'}
                           </button>
                           <button onClick={() => {
-                            if (isRecording) {
-                               sendWs({ type: 'stop_recording' });
-                               sendWs({ type: 'get_recorded' });
-                               setIsRecording(false);
-                            } else {
-                               sendWs({ type: 'start_recording', targetSelector: targetSelector.trim() || undefined });
-                               setIsRecording(true);
-
-                            }
-                          }} title="Manually flip pages in the browser while we record the images!" style={{
-                            background: isRecording ? 'rgba(239,68,68,0.2)' : 'rgba(52,211,153,0.2)', 
-                            color: isRecording ? '#ef4444' : '#34d399', 
-                            border: `1px solid ${isRecording ? 'rgba(239,68,68,0.4)' : 'rgba(52,211,153,0.4)'}`, 
-                            borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer',
-                            animation: isRecording ? 'pulse 1.5s infinite' : 'none'
+                            if (isCapturing) return;
+                            setCaptureLogs([]);
+                            setCaptureResults(null);
+                            setIsCapturing(true);
+                            sendWs({ type: 'capture_visible_spread', targetSelector: targetSelector.trim() || undefined });
+                          }} title="Capture the currently visible spread from the interactive browser!" style={{
+                            background: isCapturing ? 'rgba(59,130,246,0.2)' : 'rgba(52,211,153,0.2)', 
+                            color: isCapturing ? '#60a5fa' : '#34d399', 
+                            border: `1px solid ${isCapturing ? 'rgba(59,130,246,0.4)' : 'rgba(52,211,153,0.4)'}`, 
+                            borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: isCapturing ? 'not-allowed' : 'pointer'
                           }}>
-                            {isRecording ? `🛑 Stop & Download (${recordedCount})` : '🔴 Record While Scrolling'}
+                            {isCapturing ? `⏳ Capturing...` : '📸 Capture Visible Pages'}
                           </button>
                         </>
                       )}
@@ -443,9 +427,28 @@ export default function App() {
 
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '20px' }}>
                     {isPicking ? <span style={{ color: '#60a5fa' }}>Hover over the interactive browser on the right and click the container you want.</span>
-                      : isRecording ? <span style={{ color: '#ef4444' }}>🔴 Recording in progress... Please flip through the pages in the browser! ({recordedScreenshots} frames, {recordedCount} assets)</span>
-                      : 'Navigate to your target page in the browser, then click 🔴 Record While Scrolling to manually capture pages as you read.'}
+                      : isCapturing ? <span style={{ color: '#60a5fa' }}>📸 Capturing current spread... check logs below.</span>
+                      : 'Navigate to your target page in the browser, then click 📸 Capture Visible Pages.'}
                   </p>
+                  
+                  {/* Action Log / Trace UI */}
+                  {captureLogs.length > 0 && (
+                    <div style={{ background: '#0f172a', padding: '10px', borderRadius: '6px', fontSize: '0.7rem', color: '#94a3b8', height: '120px', overflowY: 'auto', border: '1px solid #1e293b', marginBottom: '20px', fontFamily: 'monospace' }}>
+                      <div style={{ color: '#38bdf8', marginBottom: '6px', fontWeight: 'bold' }}>--- Action Trace Log ---</div>
+                      {captureLogs.map((l, i) => (
+                        <div key={i} style={{ marginBottom: '4px' }}>&gt; {l}</div>
+                      ))}
+                    </div>
+                  )}
+                  {captureLogs.length > 0 && (
+                    <button onClick={() => {
+                       const prompt = `Hey AI, I clicked 'Capture Visible Pages' using the selector '${targetSelector}'.\nHere is the exact trace log of what the engine did:\n\n${captureLogs.join('\\n')}\n\n[USER: WRITE WHAT YOU EXPECTED TO HAPPEN HERE]`;
+                       navigator.clipboard.writeText(prompt);
+                       alert('Copied debug prompt to clipboard! Paste it to the AI.');
+                    }} style={{ background: 'rgba(56,189,248,0.1)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.3)', padding: '6px 12px', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer', display: 'block', margin: '0 auto 20px auto' }}>
+                      📋 Copy Debug Trace for AI
+                    </button>
+                  )}
 
                   {/* Multi-page crawl */}
                   <div style={{ padding: '16px', background: 'rgba(59,130,246,0.06)', borderRadius: '10px', border: '1px solid rgba(59,130,246,0.2)', marginBottom: '20px' }}>
@@ -485,7 +488,7 @@ export default function App() {
               )}
 
               <button className="btn-primary" style={{ width: '100%' }} onClick={() => setStep(2)}>
-                Next: Configure Filters ➔
+                Next: Review Capture ➔
               </button>
             </div>
           )}
@@ -651,12 +654,23 @@ export default function App() {
 
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)', flex: 1 }} onClick={() => setStep(1)}>← Back</button>
-                {recordedUrls && (
-                  <div style={{ padding: '12px', background: 'rgba(52,211,153,0.1)', borderRadius: '8px', marginBottom: '16px', fontSize: '0.85rem', color: '#10b981', border: '1px solid rgba(52,211,153,0.3)' }}>
-                    <b>About to download:</b> {recordedScreenshots} page screenshots (page-0001.png, etc) + {recordedUrls.length} extracted assets.
+                {captureResults && (
+                  <div style={{ padding: '16px', background: 'rgba(52,211,153,0.05)', borderRadius: '10px', marginBottom: '20px', border: '1px solid rgba(52,211,153,0.2)' }}>
+                    <h3 style={{ margin: '0 0 12px 0', color: '#10b981', fontSize: '1rem' }}>📦 Capture Ready!</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {captureResults.map((res: any, idx: number) => (
+                        <div key={idx} style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', fontSize: '0.85rem', color: '#e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 'bold' }}>{res.page}</span>
+                          <span style={{ display: 'flex', gap: '12px' }}>
+                            <span style={{ color: '#34d399' }}>✓ Package ({res.assets} assets)</span>
+                            <span style={{ color: '#60a5fa' }}>✓ PNG Screenshot</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
-                <button className="btn-primary" style={{ flex: 2 }} onClick={startJob}>▶ Start Extraction</button>
+                <button className="btn-primary" style={{ flex: 2 }} onClick={startJob}>📦 Package to ZIP</button>
               </div>
             </div>
           )}
