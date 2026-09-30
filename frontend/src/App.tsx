@@ -406,7 +406,12 @@ export default function App() {
                   </datalist>
                   {seedUrls.length > 0 && (
                     <div style={{ padding: '8px 12px', background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', borderRadius: '6px', fontSize: '0.78rem', color: '#34d399', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>📌 Starting from page <b>{seedUrls[0].match(/(\d+)\.[a-z]+$/i)?.[1] || '?'}</b> — {seedUrls.length} seed URLs captured</span>
+                      <span>📌 Starting from page <b>{(() => {
+                        try {
+                          const filename = new URL(seedUrls[0]).pathname.split('/').pop() || '';
+                          return filename.match(/(\d+)[^0-9]*$/)?.[1] || '?';
+                        } catch { return '?'; }
+                      })()}</b> — {seedUrls.length} seed URL{seedUrls.length !== 1 ? 's' : ''} captured</span>
                       <button onClick={() => setSeedUrls([])} style={{ background: 'transparent', border: 'none', color: '#34d399', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>✕</button>
                     </div>
                   )}

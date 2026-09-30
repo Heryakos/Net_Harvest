@@ -87,19 +87,39 @@ export class Extractor {
     // Detect sequential URL patterns like page0004.xhtml -> expand to page0004, page0005, ...pageN
     const expandSequentialUrls = (urls: string[]): string[] => {
       if (!urls.length) return urls;
-      for (const url of urls) {
-        // Match URLs ending in a zero-padded number before the extension, e.g. /Text/page0004.xhtml
-        const m = url.match(/^(https?:\/\/.+\/)([a-zA-Z_-]*)(\d{2,6})(\.[a-zA-Z0-9]+)$/);
-        if (!m) continue;
-        const [, baseDir, filePrefix, numStr, fileSuffix] = m;
-        const padLen = numStr.length;
-        const startNum = parseInt(numStr, 10);
-        const expanded: string[] = [];
-        for (let i = startNum; i < startNum + maxPages; i++) {
-          expanded.push(`${baseDir}${filePrefix}${String(i).padStart(padLen, '0')}${fileSuffix}`);
+      for (const rawUrl of urls) {
+        try {
+          const urlObj = new URL(rawUrl);
+          const pathSegments = urlObj.pathname.split('/');
+          const filename = pathSegments.pop() || '';
+
+          // Find the LAST sequence of digits in the filename
+          const m = filename.match(/^(.*?)(\d+)([^0-9]*)$/);
+          if (!m) {
+            console.log(`[Extractor] Seed URL filename did not contain a number: ${rawUrl}`);
+            continue;
+          }
+
+          const [, prefix, numStr, suffix] = m;
+          const padLen = numStr.length;
+          const startNum = parseInt(numStr, 10);
+          const expanded: string[] = [];
+
+          for (let i = startNum; i < startNum + maxPages; i++) {
+            const formattedNum = numStr.startsWith('0') ? String(i).padStart(padLen, '0') : String(i);
+            const newFilename = `${prefix}${formattedNum}${suffix}`;
+            
+            // Rebuild the URL
+            const newUrl = new URL(rawUrl);
+            newUrl.pathname = [...pathSegments, newFilename].join('/');
+            expanded.push(newUrl.href);
+          }
+
+          console.log(`[Extractor] Sequential pattern detected on ${rawUrl} — generating ${expanded.length} page URLs from page ${startNum} onwards.`);
+          return expanded;
+        } catch (e) {
+          console.log(`[Extractor] Failed to parse seed URL: ${rawUrl}`);
         }
-        console.log(`[Extractor] Sequential pattern detected — generating ${expanded.length} page URLs from page ${startNum} onwards.`);
-        return expanded;
       }
       return urls; // no pattern found, return as-is
     };
@@ -182,6 +202,12 @@ export class Extractor {
                 if (img.src) urls.push(img.src);
                 if (img.dataset.src) urls.push(new URL(img.dataset.src, baseUrl).href);
               });
+              root.querySelectorAll('image').forEach(img => {
+                const href = img.getAttribute('href') || img.getAttribute('xlink:href');
+                if (href) {
+                  try { urls.push(new URL(href, baseUrl).href); } catch {}
+                }
+              });
               root.querySelectorAll<HTMLVideoElement>('video, source').forEach(v => {
                 if (v.src) urls.push(v.src);
               });
@@ -249,6 +275,12 @@ export class Extractor {
             const base = document.querySelector('base')?.href || pageUrl;
             document.querySelectorAll<HTMLImageElement>('img').forEach(img => {
               if (img.src) urls.push(img.src);
+            });
+            document.querySelectorAll('image').forEach(img => {
+              const href = img.getAttribute('href') || img.getAttribute('xlink:href');
+              if (href) {
+                try { urls.push(new URL(href, base).href); } catch {}
+              }
             });
             document.querySelectorAll<HTMLSourceElement>('source').forEach(s => {
               if (s.src) urls.push(s.src);
