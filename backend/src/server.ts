@@ -99,7 +99,7 @@ fastify.post('/api/detect', async (request, reply) => {
   if (!url) return reply.status(400).send({ error: 'url required' });
   try {
     const extractor = new Extractor();
-    const rawUrls = await extractor.extractNetwork(url, 4000, { maxPages: 1 });
+    const { urls: rawUrls } = await extractor.extractNetwork(url, 4000, { maxPages: 1 });
 
     // Bucket by extension
     const categories: Record<string, Set<string>> = {
