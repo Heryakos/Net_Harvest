@@ -1,4 +1,4 @@
-﻿import crypto from 'crypto';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Page, BrowserContext } from 'playwright';
@@ -58,25 +58,15 @@ export class CambridgeReaderEngine {
    * IN-PAGE FETCH HELPERS
    * ========================================================== */
   async fetchText(url: string) {
-    return this.page.evaluate(async (u) => {
-      const res = await fetch(u);
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${u}`);
-      return await res.text();
-    }, url);
+    const res = await this.page.context().request.get(url);
+    if (!res.ok()) throw new Error(`HTTP ${res.status()} for ${url}`);
+    return await res.text();
   }
 
   async fetchBuf(url: string) {
-    const b64 = await this.page.evaluate(async (u) => {
-      const res = await fetch(u);
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${u}`);
-      const buf = await res.arrayBuffer();
-      let s = '';
-      const bytes = new Uint8Array(buf);
-      for (let i = 0; i < bytes.length; i += 0x8000)
-        s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-      return btoa(s);
-    }, url);
-    return Buffer.from(b64, 'base64');
+    const res = await this.page.context().request.get(url);
+    if (!res.ok()) throw new Error(`HTTP ${res.status()} for ${url}`);
+    return Buffer.from(await res.body());
   }
 
   /* ============================================================
