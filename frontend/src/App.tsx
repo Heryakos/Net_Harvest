@@ -55,6 +55,8 @@ export default function App() {
   const [jobStats, setJobStats] = useState<{ crawled?: number, max?: number, currentUrl?: string } | null>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedCount, setRecordedCount] = useState(0);
 
   // WS Interactive browser
   const [wsConnected, setWsConnected] = useState(false);
@@ -165,6 +167,26 @@ export default function App() {
     } catch { alert('Failed to start job.'); }
   };
 
+  // ── Start job with direct URLs (Recording Mode) ─────────────────────────────
+  const startDirectJob = async (urls: string[]) => {
+    disconnectBrowser();
+    try {
+      const res = await fetch('http://localhost:3000/api/jobs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startUrl: targetUrl, filters, maxPages: urls.length,
+          directResourceUrls: urls
+        })
+      });
+      const data = await res.json();
+      setActiveJobId(data.id);
+      setJobStatus('running');
+      setDownloadReady(false);
+      setJobStats(null);
+      setStep(3);
+    } catch { alert('Failed to start job.'); }
+  };
+
   const cancelJob = async () => {
     if (!activeJobId) return;
     if (!window.confirm('Are you sure you want to stop this extraction early? Any files already found will be saved in the ZIP.')) return;
@@ -225,6 +247,17 @@ export default function App() {
           alert(`✅ Captured ${msg.srcs.length} page URLs from your current browser position!\n\nFilters have been auto-set to: jpg, jpeg, png, gif, webp\n\nNow click "▶ Start Extraction" to begin.`);
         } else {
           alert('⚠️ No iframes found on this page.\n\nMake sure:\n1. The book page is fully loaded\n2. You have the correct selector in the Target section (try #readium-right-content)\n3. The interactive browser is connected');
+        }
+      }
+      else if (msg.type === 'recording_status') {
+        setRecordedCount(msg.count);
+      }
+      else if (msg.type === 'recorded_urls') {
+        const urls = msg.urls;
+        if (urls && urls.length > 0) {
+          startDirectJob(urls);
+        } else {
+          alert('No resources were captured while recording!');
         }
       }
     };
@@ -389,11 +422,29 @@ export default function App() {
                             {isPicking ? 'Cancel Picking' : '🎯 Pick from Browser'}
                           </button>
                           <button onClick={() => {
-                            sendWs({ type: 'get_iframe_srcs', selector: targetSelector.trim() || null });
-                          }} title="Capture the current book page positions from the browser and start extraction from there" style={{
-                            background: 'rgba(52,211,153,0.2)', color: '#34d399', border: '1px solid rgba(52,211,153,0.4)', borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer'
+                            if (isRecording) {
+                               sendWs({ type: 'stop_recording' });
+                               sendWs({ type: 'get_recorded' });
+                               setIsRecording(false);
+                            } else {
+                               sendWs({ type: 'start_recording', targetSelector: targetSelector.trim() || undefined });
+                               setIsRecording(true);
+                               // Auto-set filters for images since this is typically for books
+                               setFilters(prev => {
+                                 const cleaned = prev.filter(f => !['xhtml', '.xhtml', 'html', '.html'].includes(f.value.toLowerCase()));
+                                 const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
+                                 const toAdd = imageExts.filter(ext => !cleaned.some(f => f.value.toLowerCase() === ext)).map(ext => ({ type: 'extension', value: ext, isInclude: true }));
+                                 return [...cleaned, ...toAdd];
+                               });
+                            }
+                          }} title="Manually flip pages in the browser while we record the images!" style={{
+                            background: isRecording ? 'rgba(239,68,68,0.2)' : 'rgba(52,211,153,0.2)', 
+                            color: isRecording ? '#ef4444' : '#34d399', 
+                            border: `1px solid ${isRecording ? 'rgba(239,68,68,0.4)' : 'rgba(52,211,153,0.4)'}`, 
+                            borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer',
+                            animation: isRecording ? 'pulse 1.5s infinite' : 'none'
                           }}>
-                            📌 Capture From Here
+                            {isRecording ? `🛑 Stop & Download (${recordedCount})` : '🔴 Record While Scrolling'}
                           </button>
                         </>
                       )}
@@ -404,21 +455,11 @@ export default function App() {
                   <datalist id="candidate-selectors">
                     {candidateSelectors.map(s => <option key={s} value={s} />)}
                   </datalist>
-                  {seedUrls.length > 0 && (
-                    <div style={{ padding: '8px 12px', background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', borderRadius: '6px', fontSize: '0.78rem', color: '#34d399', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>📌 Starting from page <b>{(() => {
-                        try {
-                          const filename = new URL(seedUrls[0]).pathname.split('/').pop() || '';
-                          return filename.match(/(\d+)[^0-9]*$/)?.[1] || '?';
-                        } catch { return '?'; }
-                      })()}</b> — {seedUrls.length} seed URL{seedUrls.length !== 1 ? 's' : ''} captured</span>
-                      <button onClick={() => setSeedUrls([])} style={{ background: 'transparent', border: 'none', color: '#34d399', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>✕</button>
-                    </div>
-                  )}
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: seedUrls.length > 0 ? '0' : '-12px', marginBottom: '20px' }}>
+
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '20px' }}>
                     {isPicking ? <span style={{ color: '#60a5fa' }}>Hover over the interactive browser on the right and click the container you want.</span>
-                      : seedUrls.length > 0 ? <span style={{ color: '#34d399' }}>✅ Extraction will start from your current browser position and generate sequential pages automatically.</span>
-                      : 'Navigate to your target page in the browser, then click 📌 Capture From Here to start from that exact position.'}
+                      : isRecording ? <span style={{ color: '#ef4444' }}>🔴 Recording in progress... Please flip through the pages in the browser! ({recordedCount} captured)</span>
+                      : 'Navigate to your target page in the browser, then click 🔴 Record While Scrolling to manually capture pages as you read.'}
                   </p>
 
                   {/* Multi-page crawl */}

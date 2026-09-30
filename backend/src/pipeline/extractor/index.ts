@@ -28,6 +28,8 @@ export interface CrawlOptions {
   isCancelled?: () => boolean;
   /** Seed URLs to start from (e.g., iframe pages captured from the current browser position) */
   seedUrls?: string[];
+  /** Directly provided resource URLs (skips crawling completely, just downloads these) */
+  directResourceUrls?: string[];
 }
 
 export class Extractor {

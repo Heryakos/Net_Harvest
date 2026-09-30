@@ -23,7 +23,7 @@ fastify.get('/ping', async () => ({ status: 'ok' }));
 fastify.get('/api/jobs', async () => JobModel.getAllJobs());
 
 fastify.post('/api/jobs', async (request, reply) => {
-  const { startUrl, filters, maxPages, sameOriginOnly, targetSelector, crawlSpeed, seedUrls } = request.body as any;
+  const { startUrl, filters, maxPages, sameOriginOnly, targetSelector, crawlSpeed, seedUrls, directResourceUrls } = request.body as any;
   if (!startUrl) return reply.status(400).send({ error: 'startUrl is required' });
   const jobId = randomUUID();
   const job = JobModel.createJob(jobId, startUrl);
@@ -40,7 +40,8 @@ fastify.post('/api/jobs', async (request, reply) => {
     targetSelector,
     waitTimeMs,
     concurrency,
-    seedUrls: hasSeedUrls ? seedUrls : undefined
+    seedUrls: hasSeedUrls ? seedUrls : undefined,
+    directResourceUrls: directResourceUrls
   });
   return reply.status(201).send(job);
 });
@@ -167,7 +168,9 @@ const start = async () => {
       let browserContext: BrowserContext | null = null;
       let page: Page | null = null;
       let screenshotInterval: NodeJS.Timeout | null = null;
+      let recordInterval: NodeJS.Timeout | null = null;
       const sessionResources = new Set<string>();
+      const recordedUrls = new Set<string>();
 
       const send = (msg: object) => {
         if (socket.readyState === WebSocket.OPEN) {
@@ -452,6 +455,73 @@ const start = async () => {
               break;
             }
 
+            case 'start_recording':
+              if (recordInterval) clearInterval(recordInterval);
+              recordedUrls.clear();
+              send({ type: 'recording_status', count: 0 });
+              
+              recordInterval = setInterval(async () => {
+                if (!page) return;
+                try {
+                  const extracted = await page.evaluate((selector) => {
+                    const el = selector ? document.querySelector(selector) : document.body;
+                    if (!el) return [];
+                    const found: string[] = [];
+                    const base = document.querySelector('base')?.href || window.location.href;
+                    const extract = (root: Element | Document, baseUrl: string) => {
+                       root.querySelectorAll<HTMLImageElement>('img').forEach(img => {
+                         if (img.src) found.push(img.src);
+                         if (img.dataset.src) found.push(new URL(img.dataset.src, baseUrl).href);
+                       });
+                       root.querySelectorAll('image').forEach(img => {
+                         const href = img.getAttribute('href') || img.getAttribute('xlink:href');
+                         if (href) {
+                           try { found.push(new URL(href, baseUrl).href); } catch {}
+                         }
+                       });
+                       root.querySelectorAll<HTMLElement>('[style]').forEach(el => {
+                         const bg = (el as HTMLElement).style.backgroundImage;
+                         if (bg && bg !== 'none') {
+                           const match = bg.match(/url\(['"]?(.*?)['"]?\)/);
+                           if (match && match[1]) {
+                             try { found.push(new URL(match[1], baseUrl).href); } catch {}
+                           }
+                         }
+                       });
+                       root.querySelectorAll('iframe').forEach((iframe: any) => {
+                          try {
+                            const idoc = iframe.contentDocument || iframe.contentWindow?.document;
+                            if (idoc) extract(idoc, iframe.src || baseUrl);
+                          } catch (e) {}
+                       });
+                    };
+                    extract(el, base);
+                    return found;
+                  }, msg.targetSelector);
+                  
+                  let added = false;
+                  extracted.forEach(u => {
+                    if (u.startsWith('http') && !recordedUrls.has(u)) {
+                      recordedUrls.add(u);
+                      added = true;
+                    }
+                  });
+                  if (added) {
+                    send({ type: 'recording_status', count: recordedUrls.size });
+                  }
+                } catch {}
+              }, 1000);
+              break;
+              
+            case 'stop_recording':
+              if (recordInterval) clearInterval(recordInterval);
+              recordInterval = null;
+              break;
+              
+            case 'get_recorded':
+              send({ type: 'recorded_urls', urls: Array.from(recordedUrls) });
+              break;
+
             case 'screenshot':
               await sendScreenshot();
               break;
@@ -463,12 +533,14 @@ const start = async () => {
 
       socket.on('close', async () => {
         if (screenshotInterval) clearInterval(screenshotInterval);
+        if (recordInterval) clearInterval(recordInterval);
         if (browserContext) await browserContext.close().catch(() => {});
         console.log(`[WS] Session ${sessionId} closed.`);
       });
 
       socket.on('error', () => {
         if (screenshotInterval) clearInterval(screenshotInterval);
+        if (recordInterval) clearInterval(recordInterval);
         browserContext?.close().catch(() => {});
       });
     });

@@ -36,9 +36,31 @@ export class JobRunner {
 
         const extractor = new Extractor();
 
-        // Crawl using seedUrls if provided (from browser capture) or from startUrl
-        const waitTime = crawlOptions.waitTimeMs || 4000;
-        const { urls: rawUrls, cookies } = await extractor.extractNetwork(url, waitTime, crawlOptions);
+        let rawUrls: string[] = [];
+        let cookies = '';
+
+        if (crawlOptions.directResourceUrls && crawlOptions.directResourceUrls.length > 0) {
+          rawUrls = crawlOptions.directResourceUrls;
+          console.log(`[JobRunner] Using ${rawUrls.length} direct resource URLs (skipping crawl).`);
+          
+          // Optionally get cookies if needed, or we might need to assume the fetcher has access.
+          // The Interactive Browser uses the same persistent profile, so Fetcher will need cookies.
+          // Let's grab them quickly using a headless instance just to get the session cookies.
+          try {
+            const userDataDir = path.join(process.cwd(), 'data', 'browser_session');
+            const { chromium } = require('playwright-extra');
+            const context = await chromium.launchPersistentContext(userDataDir, { headless: true });
+            const browserCookies = await context.cookies();
+            cookies = browserCookies.map((c: any) => `${c.name}=${c.value}`).join('; ');
+            await context.close();
+          } catch {}
+        } else {
+          // Normal crawl
+          const waitTime = crawlOptions.waitTimeMs || 4000;
+          const result = await extractor.extractNetwork(url, waitTime, crawlOptions);
+          rawUrls = result.urls;
+          cookies = result.cookies;
+        }
 
         // Filter to only what the user wants
         const filterEngine = new URLFilter(filters || []);
