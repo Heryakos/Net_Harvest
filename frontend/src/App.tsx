@@ -168,7 +168,7 @@ export default function App() {
   };
 
   // ── Start job with direct URLs (Recording Mode) ─────────────────────────────
-  const startDirectJob = async (urls: string[]) => {
+  const startDirectJob = async (urls: string[], sessionCookies?: string) => {
     disconnectBrowser();
     try {
       const res = await fetch('http://localhost:3000/api/jobs', {
@@ -178,7 +178,8 @@ export default function App() {
           // Recording mode: no filters — we already captured ONLY the URLs we want
           filters: [],
           maxPages: urls.length,
-          directResourceUrls: urls
+          directResourceUrls: urls,
+          sessionCookies: sessionCookies || ''
         })
       });
       const data = await res.json();
@@ -257,8 +258,9 @@ export default function App() {
       }
       else if (msg.type === 'recorded_urls') {
         const urls = msg.urls;
+        const cookies = msg.cookies || '';
         if (urls && urls.length > 0) {
-          startDirectJob(urls);
+          startDirectJob(urls, cookies);
         } else {
           alert('No resources were captured while recording!');
         }

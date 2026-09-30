@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+﻿import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { JobModel } from './jobs/jobModel';
 import { randomUUID } from 'crypto';
@@ -23,7 +23,7 @@ fastify.get('/ping', async () => ({ status: 'ok' }));
 fastify.get('/api/jobs', async () => JobModel.getAllJobs());
 
 fastify.post('/api/jobs', async (request, reply) => {
-  const { startUrl, filters, maxPages, sameOriginOnly, targetSelector, crawlSpeed, seedUrls, directResourceUrls } = request.body as any;
+  const { startUrl, filters, maxPages, sameOriginOnly, targetSelector, crawlSpeed, seedUrls, directResourceUrls, sessionCookies } = request.body as any;
   if (!startUrl) return reply.status(400).send({ error: 'startUrl is required' });
   const jobId = randomUUID();
   const job = JobModel.createJob(jobId, startUrl);
@@ -41,7 +41,8 @@ fastify.post('/api/jobs', async (request, reply) => {
     waitTimeMs,
     concurrency,
     seedUrls: hasSeedUrls ? seedUrls : undefined,
-    directResourceUrls: directResourceUrls
+    directResourceUrls: directResourceUrls,
+    sessionCookies: sessionCookies || ''
   });
   return reply.status(201).send(job);
 });
@@ -491,9 +492,19 @@ const start = async () => {
               recordInterval = null;
               break;
               
-            case 'get_recorded':
-              send({ type: 'recorded_urls', urls: Array.from(recordedUrls) });
+            case 'get_recorded': {
+              // Grab cookies NOW while the browser is still open
+              let sessionCookies = '';
+              try {
+                if (browserContext) {
+                  const cookieList = await browserContext.cookies();
+                  sessionCookies = cookieList.map((c: any) => `=`).join('; ');
+                  console.log(`[Recording] Captured  cookies for download auth.`);
+                }
+              } catch(e: any) { console.warn('[Recording] Could not get cookies:', e.message); }
+              send({ type: 'recorded_urls', urls: Array.from(recordedUrls), cookies: sessionCookies });
               break;
+            }
 
             case 'screenshot':
               await sendScreenshot();

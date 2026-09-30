@@ -30,6 +30,8 @@ export interface CrawlOptions {
   seedUrls?: string[];
   /** Directly provided resource URLs (skips crawling completely, just downloads these) */
   directResourceUrls?: string[];
+  /** Session cookies passed from the live interactive browser to authenticate downloads */
+  sessionCookies?: string;
 }
 
 export class Extractor {

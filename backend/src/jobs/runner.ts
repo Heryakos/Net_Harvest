@@ -43,15 +43,11 @@ export class JobRunner {
           const imageUrls = crawlOptions.directResourceUrls;
           console.log(`[JobRunner] Recording mode: directly downloading ${imageUrls.length} captured image URLs...`);
           rawUrls = imageUrls;
-          // Get cookies from the browser session to authenticate downloads
-          try {
-            const userDataDir = path.join(process.cwd(), 'data', 'browser_session');
-            const { chromium } = require('playwright-extra');
-            const context = await chromium.launchPersistentContext(userDataDir, { headless: true });
-            const browserCookies = await context.cookies();
-            cookies = browserCookies.map((c: any) => `${c.name}=${c.value}`).join('; ');
-            await context.close();
-          } catch(e: any) { console.warn('[JobRunner] Could not get cookies:', e.message); }
+          // Use cookies passed directly from the active browser session
+          if (crawlOptions.sessionCookies) {
+            cookies = crawlOptions.sessionCookies;
+            console.log(`[JobRunner] Used ${cookies.split(';').length} cookies provided by live session for auth.`);
+          }
         } else {
           // Normal crawl
           const waitTime = crawlOptions.waitTimeMs || 4000;
