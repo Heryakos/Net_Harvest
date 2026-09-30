@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+﻿import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { JobModel } from './jobs/jobModel';
 import { randomUUID } from 'crypto';
@@ -18,7 +18,7 @@ import http from 'http';
 const fastify = Fastify({ logger: true });
 fastify.register(cors, { origin: true });
 
-// ─── Health & Jobs ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Health & Jobs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 fastify.get('/ping', async () => ({ status: 'ok' }));
 fastify.get('/api/jobs', async () => JobModel.getAllJobs());
 
@@ -46,7 +46,7 @@ fastify.post('/api/jobs', async (request, reply) => {
   return reply.status(201).send(job);
 });
 
-// ─── Cancel Job ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Cancel Job â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 fastify.post('/api/jobs/:id/cancel', async (request, reply) => {
   const { id } = request.params as { id: string };
   try {
@@ -58,7 +58,7 @@ fastify.post('/api/jobs/:id/cancel', async (request, reply) => {
   }
 });
 
-// ─── Download ZIP ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Download ZIP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 fastify.get('/api/jobs/:id/download', async (request, reply) => {
   const { id } = request.params as { id: string };
   try {
@@ -73,7 +73,7 @@ fastify.get('/api/jobs/:id/download', async (request, reply) => {
   }
 });
 
-// ─── Live filter preview ──────────────────────────────────────────────────────
+// â”€â”€â”€ Live filter preview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 fastify.post('/api/preview', async (request, reply) => {
   const { url, filters, maxPages, targetSelector } = request.body as {
     url: string; filters: FilterRule[]; maxPages?: number; targetSelector?: string;
@@ -94,7 +94,7 @@ fastify.post('/api/preview', async (request, reply) => {
   }
 });
 
-// ─── Auto-detect file types on a URL ─────────────────────────────────────────
+// â”€â”€â”€ Auto-detect file types on a URL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 fastify.post('/api/detect', async (request, reply) => {
   const { url } = request.body as { url: string };
   if (!url) return reply.status(400).send({ error: 'url required' });
@@ -154,7 +154,7 @@ fastify.post('/api/detect', async (request, reply) => {
   }
 });
 
-// ─── Start HTTP server, then attach raw WebSocket server ─────────────────────
+// â”€â”€â”€ Start HTTP server, then attach raw WebSocket server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const start = async () => {
   try {
     await fastify.listen({ port: 3000, host: '0.0.0.0' });
@@ -455,65 +455,37 @@ const start = async () => {
               break;
             }
 
+            
             case 'start_recording':
               if (recordInterval) clearInterval(recordInterval);
               recordedUrls.clear();
               send({ type: 'recording_status', count: 0 });
-              
               recordInterval = setInterval(async () => {
                 if (!page) return;
                 try {
-                  const extracted = await page.evaluate((selector) => {
-                    const el = selector ? document.querySelector(selector) : document.body;
-                    if (!el) return [];
+                  const iframeSrcs = await page.evaluate((selector: string | null) => {
+                    const root = selector ? document.querySelector(selector) : document.body;
+                    if (!root) return [] as string[];
                     const found: string[] = [];
-                    const base = document.querySelector('base')?.href || window.location.href;
-                    const extract = (root: Element | Document, baseUrl: string) => {
-                       root.querySelectorAll<HTMLImageElement>('img').forEach(img => {
-                         if (img.src) found.push(img.src);
-                         if (img.dataset.src) found.push(new URL(img.dataset.src, baseUrl).href);
-                       });
-                       root.querySelectorAll('image').forEach(img => {
-                         const href = img.getAttribute('href') || img.getAttribute('xlink:href');
-                         if (href) {
-                           try { found.push(new URL(href, baseUrl).href); } catch {}
-                         }
-                       });
-                       root.querySelectorAll<HTMLElement>('[style]').forEach(el => {
-                         const bg = (el as HTMLElement).style.backgroundImage;
-                         if (bg && bg !== 'none') {
-                           const match = bg.match(/url\(['"]?(.*?)['"]?\)/);
-                           if (match && match[1]) {
-                             try { found.push(new URL(match[1], baseUrl).href); } catch {}
-                           }
-                         }
-                       });
-                       root.querySelectorAll('iframe').forEach((iframe: any) => {
-                          try {
-                            const idoc = iframe.contentDocument || iframe.contentWindow?.document;
-                            if (idoc) extract(idoc, iframe.src || baseUrl);
-                          } catch (e) {}
-                       });
-                    };
-                    extract(el, base);
+                    root.querySelectorAll('iframe[src]').forEach((iframe: any) => {
+                      const src: string = iframe.getAttribute('src') || '';
+                      if (!src || src.startsWith('javascript:')) return;
+                      try { found.push(new URL(src, window.location.href).href); } catch {}
+                    });
                     return found;
-                  }, msg.targetSelector);
-                  
+                  }, msg.targetSelector || null);
                   let added = false;
-                  extracted.forEach(u => {
+                  (iframeSrcs as string[]).forEach((u: string) => {
                     if (u.startsWith('http') && !recordedUrls.has(u)) {
                       recordedUrls.add(u);
                       added = true;
                     }
                   });
-                  if (added) {
-                    send({ type: 'recording_status', count: recordedUrls.size });
-                  }
+                  if (added) { send({ type: 'recording_status', count: recordedUrls.size }); }
                 } catch {}
-              }, 1000);
+              }, 600);
               break;
-              
-            case 'stop_recording':
+              case 'stop_recording':
               if (recordInterval) clearInterval(recordInterval);
               recordInterval = null;
               break;
@@ -553,3 +525,4 @@ const start = async () => {
 };
 
 start();
+
