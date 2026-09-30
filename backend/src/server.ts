@@ -1,4 +1,4 @@
-﻿import Fastify from 'fastify';
+import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { JobModel } from './jobs/jobModel';
 import { randomUUID } from 'crypto';
@@ -463,26 +463,57 @@ const start = async () => {
               recordInterval = setInterval(async () => {
                 if (!page) return;
                 try {
-                  const iframeSrcs = await page.evaluate((selector: string | null) => {
-                    const root = selector ? document.querySelector(selector) : document.body;
-                    if (!root) return [] as string[];
-                    const found: string[] = [];
-                    root.querySelectorAll('iframe[src]').forEach((iframe: any) => {
-                      const src: string = iframe.getAttribute('src') || '';
-                      if (!src || src.startsWith('javascript:')) return;
-                      try { found.push(new URL(src, window.location.href).href); } catch {}
-                    });
-                    return found;
-                  }, msg.targetSelector || null);
+                  // Try top-level document first
+                  let found: string[] = [];
+                  
+                  // Strategy 1: search in top-level document
+                  found = await page.evaluate((selector: string | null) => {
+                    const searchIn = (root: Element | Document): string[] => {
+                      const results: string[] = [];
+                      const target = (selector && root.querySelector) ? (root.querySelector(selector) || root) : root;
+                      target.querySelectorAll('iframe[src]').forEach((iframe: any) => {
+                        const src: string = iframe.getAttribute('src') || '';
+                        if (!src || src.startsWith('javascript:') || src.startsWith('about:')) return;
+                        try { results.push(new URL(src, window.location.href).href); } catch {}
+                      });
+                      return results;
+                    };
+                    return searchIn(document);
+                  }, msg.targetSelector || null).catch(() => [] as string[]);
+
+                  // Strategy 2: if nothing found, search inside all iframes of the page
+                  if (found.length === 0) {
+                    for (const frame of page.frames()) {
+                      try {
+                        const frameFound = await frame.evaluate((selector: string | null) => {
+                          const searchRoot = (selector && document.querySelector(selector)) || document;
+                          const results: string[] = [];
+                          searchRoot.querySelectorAll('iframe[src]').forEach((iframe: any) => {
+                            const src: string = iframe.getAttribute('src') || '';
+                            if (!src || src.startsWith('javascript:') || src.startsWith('about:')) return;
+                            try { results.push(new URL(src, window.location.href).href); } catch {}
+                          });
+                          return results;
+                        }, msg.targetSelector || null).catch(() => [] as string[]);
+                        found = found.concat(frameFound);
+                      } catch {}
+                    }
+                  }
+                  
+                  console.log(`[Recording] Found ${found.length} iframe srcs on this tick`);
+                  
                   let added = false;
-                  (iframeSrcs as string[]).forEach((u: string) => {
+                  found.forEach((u: string) => {
                     if (u.startsWith('http') && !recordedUrls.has(u)) {
                       recordedUrls.add(u);
                       added = true;
                     }
                   });
-                  if (added) { send({ type: 'recording_status', count: recordedUrls.size }); }
-                } catch {}
+                  if (added) { 
+                    console.log(`[Recording] New URLs: ${Array.from(recordedUrls).slice(-3).join(', ')}`);
+                    send({ type: 'recording_status', count: recordedUrls.size }); 
+                  }
+                } catch(e: any) { console.error('[Recording error]', e.message); }
               }, 600);
               break;
               case 'stop_recording':
