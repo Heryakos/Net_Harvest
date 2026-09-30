@@ -40,19 +40,18 @@ export class JobRunner {
         let cookies = '';
 
         if (crawlOptions.directResourceUrls && crawlOptions.directResourceUrls.length > 0) {
-          const xhtmlUrls = crawlOptions.directResourceUrls;
-          console.log(`[JobRunner] Recording mode: visiting ${xhtmlUrls.length} captured page URLs to extract images...`);
-          
-          // Use extractNetwork with these as seedUrls (it visits each page and extracts resources)
-          const waitTime = crawlOptions.waitTimeMs || 4000;
-          const result = await extractor.extractNetwork(xhtmlUrls[0], waitTime, {
-            ...crawlOptions,
-            seedUrls: xhtmlUrls,
-            maxPages: xhtmlUrls.length,
-            directResourceUrls: undefined  // don't recurse
-          });
-          rawUrls = result.urls;
-          cookies = result.cookies;
+          const imageUrls = crawlOptions.directResourceUrls;
+          console.log(`[JobRunner] Recording mode: directly downloading ${imageUrls.length} captured image URLs...`);
+          rawUrls = imageUrls;
+          // Get cookies from the browser session to authenticate downloads
+          try {
+            const userDataDir = path.join(process.cwd(), 'data', 'browser_session');
+            const { chromium } = require('playwright-extra');
+            const context = await chromium.launchPersistentContext(userDataDir, { headless: true });
+            const browserCookies = await context.cookies();
+            cookies = browserCookies.map((c: any) => `${c.name}=${c.value}`).join('; ');
+            await context.close();
+          } catch(e: any) { console.warn('[JobRunner] Could not get cookies:', e.message); }
         } else {
           // Normal crawl
           const waitTime = crawlOptions.waitTimeMs || 4000;

@@ -458,63 +458,33 @@ const start = async () => {
             
             case 'start_recording':
               if (recordInterval) clearInterval(recordInterval);
-              recordedUrls.clear();
+              // Don't clear sessionResources - they accumulate from page load onwards
+              // But do snapshot how many we had before, to show only newly captured
+              const baselineCount = sessionResources.size;
               send({ type: 'recording_status', count: 0 });
+              
               recordInterval = setInterval(async () => {
                 if (!page) return;
                 try {
-                  // Try top-level document first
-                  let found: string[] = [];
-                  
-                  // Strategy 1: search in top-level document
-                  found = await page.evaluate((selector: string | null) => {
-                    const searchIn = (root: Element | Document): string[] => {
-                      const results: string[] = [];
-                      const target = (selector && root.querySelector) ? (root.querySelector(selector) || root) : root;
-                      target.querySelectorAll('iframe[src]').forEach((iframe: any) => {
-                        const src: string = iframe.getAttribute('src') || '';
-                        if (!src || src.startsWith('javascript:') || src.startsWith('about:')) return;
-                        try { results.push(new URL(src, window.location.href).href); } catch {}
-                      });
-                      return results;
-                    };
-                    return searchIn(document);
-                  }, msg.targetSelector || null).catch(() => [] as string[]);
-
-                  // Strategy 2: if nothing found, search inside all iframes of the page
-                  if (found.length === 0) {
-                    for (const frame of page.frames()) {
-                      try {
-                        const frameFound = await frame.evaluate((selector: string | null) => {
-                          const searchRoot = (selector && document.querySelector(selector)) || document;
-                          const results: string[] = [];
-                          searchRoot.querySelectorAll('iframe[src]').forEach((iframe: any) => {
-                            const src: string = iframe.getAttribute('src') || '';
-                            if (!src || src.startsWith('javascript:') || src.startsWith('about:')) return;
-                            try { results.push(new URL(src, window.location.href).href); } catch {}
-                          });
-                          return results;
-                        }, msg.targetSelector || null).catch(() => [] as string[]);
-                        found = found.concat(frameFound);
-                      } catch {}
-                    }
-                  }
-                  
-                  console.log(`[Recording] Found ${found.length} iframe srcs on this tick`);
-                  
-                  let added = false;
-                  found.forEach((u: string) => {
-                    if (u.startsWith('http') && !recordedUrls.has(u)) {
-                      recordedUrls.add(u);
-                      added = true;
-                    }
+                  // Filter sessionResources to only image-like URLs
+                  const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.avif'];
+                  const imageUrls = Array.from(sessionResources).filter(u => {
+                    try {
+                      const path = new URL(u).pathname.toLowerCase();
+                      return IMAGE_EXTS.some(ext => path.endsWith(ext));
+                    } catch { return false; }
                   });
-                  if (added) { 
-                    console.log(`[Recording] New URLs: ${Array.from(recordedUrls).slice(-3).join(', ')}`);
-                    send({ type: 'recording_status', count: recordedUrls.size }); 
+                  
+                  // Update recordedUrls with all image URLs seen so far
+                  const prevSize = recordedUrls.size;
+                  imageUrls.forEach(u => recordedUrls.add(u));
+                  
+                  if (recordedUrls.size !== prevSize) {
+                    console.log(`[Recording] ${recordedUrls.size} images captured (network). Latest: ${imageUrls.slice(-2).join(', ')}`);
+                    send({ type: 'recording_status', count: recordedUrls.size });
                   }
                 } catch(e: any) { console.error('[Recording error]', e.message); }
-              }, 600);
+              }, 800);
               break;
               case 'stop_recording':
               if (recordInterval) clearInterval(recordInterval);

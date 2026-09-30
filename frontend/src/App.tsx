@@ -52,7 +52,7 @@ export default function App() {
   const [browserTab, setBrowserTab] = useState<BrowserTab>('interactive');
   const [jobStatus, setJobStatus] = useState('');
   const [downloadReady, setDownloadReady] = useState(false);
-  const [jobStats, setJobStats] = useState<{ crawled?: number, max?: number, currentUrl?: string } | null>(null);
+  const [jobStats, setJobStats] = useState<{ crawled?: number, max?: number, currentUrl?: string, resourcesFound?: number } | null>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -174,7 +174,10 @@ export default function App() {
       const res = await fetch('http://localhost:3000/api/jobs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          startUrl: targetUrl, filters, maxPages: urls.length,
+          startUrl: targetUrl,
+          // Recording mode: no filters — we already captured ONLY the URLs we want
+          filters: [],
+          maxPages: urls.length,
           directResourceUrls: urls
         })
       });
@@ -638,7 +641,7 @@ export default function App() {
                   f.isInclude && ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.avif'].includes(f.value.toLowerCase())
                 );
                 const hasBlockingXhtmlFilter = filters.some(f => f.isInclude && ['.xhtml', 'xhtml'].includes(f.value.toLowerCase()));
-                const noFilters = filters.filter(f => f.isInclude).length === 0;
+
                 if (seedUrls.length > 0 && !hasImageFilter) {
                   return (
                     <div style={{ marginBottom: '12px', padding: '12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '8px', fontSize: '0.82rem', color: '#fca5a5' }}>
