@@ -1,4 +1,4 @@
-import PQueue from 'p-queue';
+﻿import PQueue from 'p-queue';
 import { db } from '../db/index';
 import { Extractor, CrawlOptions } from '../pipeline/extractor';
 import { URLFilter, FilterRule } from '../pipeline/filter';

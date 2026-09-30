@@ -57,6 +57,8 @@ export default function App() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedCount, setRecordedCount] = useState(0);
+  const [recordedUrls, setRecordedUrls] = useState<string[] | null>(null);
+  const [recordedCookies, setRecordedCookies] = useState<string>('');
 
   // WS Interactive browser
   const [wsConnected, setWsConnected] = useState(false);
@@ -145,40 +147,17 @@ export default function App() {
 
   // ── Start job ───────────────────────────────────────────────────────────────
   const startJob = async () => {
-    // Crucial: Disconnect the interactive browser to release the profile lock
-    // so the headless extractor can use the authenticated session!
     disconnectBrowser();
 
     try {
       const res = await fetch('http://localhost:3000/api/jobs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          startUrl: targetUrl, filters, maxPages, sameOriginOnly, crawlSpeed,
+          startUrl: targetUrl, filters, maxPages: recordedUrls ? recordedUrls.length : maxPages, sameOriginOnly, crawlSpeed,
           targetSelector: targetSelector.trim() || undefined,
-          seedUrls: seedUrls.length > 0 ? seedUrls : undefined
-        })
-      });
-      const data = await res.json();
-      setActiveJobId(data.id);
-      setJobStatus('running');
-      setDownloadReady(false);
-      setJobStats(null);
-      setStep(3);
-    } catch { alert('Failed to start job.'); }
-  };
-
-  // ── Start job with direct URLs (Recording Mode) ─────────────────────────────
-  const startDirectJob = async (urls: string[], sessionCookies?: string) => {
-    disconnectBrowser();
-    try {
-      const res = await fetch('http://localhost:3000/api/jobs', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          startUrl: targetUrl,
-          filters,
-          maxPages: urls.length,
-          directResourceUrls: urls,
-          sessionCookies: sessionCookies || ''
+          seedUrls: seedUrls.length > 0 ? seedUrls : undefined,
+          directResourceUrls: recordedUrls || undefined,
+          sessionCookies: recordedCookies || undefined
         })
       });
       const data = await res.json();
@@ -259,7 +238,9 @@ export default function App() {
         const urls = msg.urls;
         const cookies = msg.cookies || '';
         if (urls && urls.length > 0) {
-          startDirectJob(urls, cookies);
+          setRecordedUrls(urls);
+          setRecordedCookies(cookies);
+          setStep(2);
         } else {
           alert('No resources were captured while recording!');
         }
