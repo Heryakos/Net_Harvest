@@ -19,8 +19,10 @@ export class CambridgeReaderEngine {
    * ========================================================== */
   async listVisibleIframes() {
     return this.page.evaluate((sel) => {
-      const root = document.querySelector(sel);
-      if (!root) throw new Error(`Selector not found: ${sel}`);
+      const root = document.querySelector(sel) || document.body;
+      if (!document.querySelector(sel)) {
+         console.warn(`Selector not found: ${sel}, falling back to document.body`);
+      }
       return [...root.querySelectorAll('iframe')]
         .map(f => {
           const r = f.getBoundingClientRect();
