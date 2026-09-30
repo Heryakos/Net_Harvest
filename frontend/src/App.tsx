@@ -406,6 +406,20 @@ export default function App() {
                             setCaptureLogs([]);
                             setCaptureResults(null);
                             setIsCapturing(true);
+                            sendWs({ type: 'test_single_image', targetSelector: targetSelector.trim() || undefined });
+                          }} title="Test extracting ONE single image element to verify the pipeline." style={{
+                            background: isCapturing ? 'rgba(59,130,246,0.2)' : 'rgba(234,179,8,0.2)', 
+                            color: isCapturing ? '#60a5fa' : '#facc15', 
+                            border: `1px solid ${isCapturing ? 'rgba(59,130,246,0.4)' : 'rgba(234,179,8,0.4)'}`, 
+                            borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: isCapturing ? 'not-allowed' : 'pointer'
+                          }}>
+                            {isCapturing ? `⏳ Wait...` : '🧪 Test Single Image'}
+                          </button>
+                          <button onClick={() => {
+                            if (isCapturing) return;
+                            setCaptureLogs([]);
+                            setCaptureResults(null);
+                            setIsCapturing(true);
                             sendWs({ type: 'capture_visible_spread', targetSelector: targetSelector.trim() || undefined });
                           }} title="Capture the currently visible spread from the interactive browser!" style={{
                             background: isCapturing ? 'rgba(59,130,246,0.2)' : 'rgba(52,211,153,0.2)', 
@@ -413,7 +427,7 @@ export default function App() {
                             border: `1px solid ${isCapturing ? 'rgba(59,130,246,0.4)' : 'rgba(52,211,153,0.4)'}`, 
                             borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: isCapturing ? 'not-allowed' : 'pointer'
                           }}>
-                            {isCapturing ? `⏳ Capturing...` : '📸 Capture Visible Pages'}
+                            {isCapturing ? `⏳ Capturing...` : '📸 Capture Spread (Full)'}
                           </button>
                         </>
                       )}

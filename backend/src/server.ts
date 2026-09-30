@@ -482,6 +482,33 @@ const start = async () => {
               break;
             }
 
+            case 'test_single_image': {
+              if (!page) {
+                send({ type: 'error', message: 'No active browser page' });
+                return;
+              }
+              const { CambridgeReaderEngine } = require('./engine');
+              const engine = new CambridgeReaderEngine(page);
+              engine.selector = msg.targetSelector || '#readium-right-content';
+              
+              const jobId = msg.jobId || 'interactive_' + Date.now();
+              const destDir = require('path').join(process.cwd(), 'data', 'downloads', jobId);
+              
+              send({ type: 'capture_log', log: `▶ Button pressed. Target: "${engine.selector}"` });
+              
+              try {
+                const trace = (progress: string) => send({ type: 'capture_log', log: progress });
+                const result = await engine.captureSingleImage(destDir, trace);
+                
+                send({ type: 'capture_log', log: `✅ Successfully saved ZIP!` });
+                send({ type: 'capture_success', results: result, jobId });
+              } catch (e: any) {
+                send({ type: 'capture_log', log: `❌ ERROR: ${e.message}` });
+                send({ type: 'error', message: e.message });
+              }
+              break;
+            }
+
             case 'screenshot':
               await sendScreenshot();
               break;

@@ -170,7 +170,36 @@ export class CambridgeReaderEngine {
     return results;
   }
 
-  guessExt(url: string, buf: Buffer) {
+  /* ============================================================
+   * SINGLE IMAGE TEST (MVP)
+   * ========================================================== */
+  async captureSingleImage(outDir: string, onProgress?: (msg: string) => void) {
+    if (onProgress) onProgress(`[single-test] 1/5 Looking for selector "${this.selector}"...`);
+    let el = await this.page.$(this.selector);
+    if (!el) {
+      if (onProgress) onProgress(`[single-test] ❌ FAIL: selector not found on page. Falling back to body.`);
+      el = await this.page.$('body');
+    }
+    const box = await el!.boundingBox();
+    if (onProgress) onProgress(`[single-test] ✅ Found. Size: ${box ? Math.round(box.width) : 0}x${box ? Math.round(box.height) : 0}px`);
+
+    if (onProgress) onProgress('[single-test] 2/5 Taking element screenshot...');
+    const buf = await el!.screenshot({ type: 'png' });
+    
+    if (onProgress) onProgress(`[single-test] ✅ Captured ${buf.length} bytes`);
+
+    const fs = require('fs');
+    const path = require('path');
+    fs.mkdirSync(outDir, { recursive: true });
+    const pngPath = path.join(outDir, 'single-capture.png');
+    fs.writeFileSync(pngPath, buf);
+    if (onProgress) onProgress(`[single-test] 3/5 Saved → ${pngPath}`);
+
+    if (onProgress) onProgress('[single-test] 4/5 Zipped via server logic.');
+    return [{ page: 'single-capture.png', assets: 0, outDir }];
+  }
+
+guessExt(url: string, buf: Buffer) {
     const m = url.match(/\.(png|jpe?g|webp|svg|gif|css|xhtml?|html|js|woff2?|ttf|otf|mp3|mp4)(\?|$)/i);
     if (m) return m[1].toLowerCase().replace('jpeg', 'jpg');
     if (buf[0] === 0x89 && buf[1] === 0x50) return 'png';
