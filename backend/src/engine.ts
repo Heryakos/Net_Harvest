@@ -176,15 +176,18 @@ export class CambridgeReaderEngine {
   async captureSingleImage(outDir: string, onProgress?: (msg: string) => void) {
     if (onProgress) onProgress(`[single-test] 1/5 Looking for selector "${this.selector}"...`);
     let el = await this.page.$(this.selector);
-    if (!el) {
-      if (onProgress) onProgress(`[single-test] ❌ FAIL: selector not found on page. Falling back to body.`);
-      el = await this.page.$('body');
-    }
-    const box = await el!.boundingBox();
-    if (onProgress) onProgress(`[single-test] ✅ Found. Size: ${box ? Math.round(box.width) : 0}x${box ? Math.round(box.height) : 0}px`);
+    let buf: Buffer;
 
-    if (onProgress) onProgress('[single-test] 2/5 Taking element screenshot...');
-    const buf = await el!.screenshot({ type: 'png' });
+    if (el) {
+      const box = await el.boundingBox();
+      if (onProgress) onProgress(`[single-test] ✅ Found. Size: ${box ? Math.round(box.width) : 0}x${box ? Math.round(box.height) : 0}px`);
+      if (onProgress) onProgress('[single-test] 2/5 Taking element screenshot...');
+      buf = await el.screenshot({ type: 'png' });
+    } else {
+      if (onProgress) onProgress(`[single-test] ❌ FAIL: selector not found on page. Falling back to viewport screenshot.`);
+      if (onProgress) onProgress('[single-test] 2/5 Taking viewport screenshot...');
+      buf = await this.page.screenshot({ type: 'png' });
+    }
     
     if (onProgress) onProgress(`[single-test] ✅ Captured ${buf.length} bytes`);
 
