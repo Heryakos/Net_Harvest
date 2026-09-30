@@ -470,19 +470,11 @@ const start = async () => {
               recordInterval = setInterval(async () => {
                 if (!page) return;
                 try {
-                  // Filter sessionResources to only image-like URLs OR actual image content-types
-                  const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.avif'];
-                  const imageUrls = Array.from(sessionResources.entries())
-                    .filter(([url, contentType]) => {
-                      if (contentType.startsWith('image/')) return true;
-                      try {
-                        const path = new URL(url).pathname.toLowerCase();
-                        return IMAGE_EXTS.some(ext => path.endsWith(ext));
-                      } catch { return false; }
-                    })
-                    .map(([url, _]) => url);
+                  // Capture ALL session resources seen while recording.
+                  // The frontend will apply the user's active filters before downloading.
+                  const imageUrls = Array.from(sessionResources.keys());
                   
-                  // Update recordedUrls with all image URLs seen so far
+                  // Update recordedUrls with all URLs seen so far
                   const prevSize = recordedUrls.size;
                   imageUrls.forEach(u => recordedUrls.add(u));
                   

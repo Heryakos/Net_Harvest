@@ -49,9 +49,7 @@ export class JobRunner {
             console.log(`[JobRunner] Used ${cookies.split(';').length} cookies provided by live session for auth.`);
           }
           
-          // Artificially update stats so the frontend knows we successfully "crawled" the captured urls
-          const stats = { crawled: imageUrls.length, max: imageUrls.length, currentUrl: 'Interactive Browser Capture', resourcesFound: imageUrls.length };
-          db.prepare("UPDATE jobs SET stats = ? WHERE id = ?").run(JSON.stringify(stats), jobId);
+          // We will update stats later after filtering
         } else {
           // Normal crawl
           const waitTime = crawlOptions.waitTimeMs || 4000;
@@ -65,6 +63,11 @@ export class JobRunner {
         const allowed = rawUrls.filter(u => filterEngine.isAllowed(u));
 
         console.log(`[JobRunner] Found ${allowed.length} allowed resources across all pages.`);
+
+        if (crawlOptions.directResourceUrls && crawlOptions.directResourceUrls.length > 0) {
+          const stats = { crawled: 1, max: 1, currentUrl: 'Interactive Browser Capture', resourcesFound: allowed.length };
+          db.prepare("UPDATE jobs SET stats = ? WHERE id = ?").run(JSON.stringify(stats), jobId);
+        }
 
         const fetcher = new Fetcher();
         const destDir = path.join(process.cwd(), 'data', 'downloads', jobId);

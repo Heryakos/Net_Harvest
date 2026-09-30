@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './index.css';
 import { FilterGuide } from './components/FilterGuide';
 import CreatableSelect from 'react-select/creatable';
@@ -175,8 +175,7 @@ export default function App() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           startUrl: targetUrl,
-          // Recording mode: no filters — we already captured ONLY the URLs we want
-          filters: [],
+          filters,
           maxPages: urls.length,
           directResourceUrls: urls,
           sessionCookies: sessionCookies || ''
@@ -434,13 +433,7 @@ export default function App() {
                             } else {
                                sendWs({ type: 'start_recording', targetSelector: targetSelector.trim() || undefined });
                                setIsRecording(true);
-                               // Auto-set filters for images since this is typically for books
-                               setFilters(prev => {
-                                 const cleaned = prev.filter(f => !['xhtml', '.xhtml', 'html', '.html'].includes(f.value.toLowerCase()));
-                                 const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
-                                 const toAdd = imageExts.filter(ext => !cleaned.some(f => f.value.toLowerCase() === ext)).map(ext => ({ type: 'extension', value: ext, isInclude: true }));
-                                 return [...cleaned, ...toAdd];
-                               });
+
                             }
                           }} title="Manually flip pages in the browser while we record the images!" style={{
                             background: isRecording ? 'rgba(239,68,68,0.2)' : 'rgba(52,211,153,0.2)', 
