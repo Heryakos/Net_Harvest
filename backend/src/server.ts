@@ -1,4 +1,4 @@
-﻿import Fastify from 'fastify';
+import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { JobModel } from './jobs/jobModel';
 import { randomUUID } from 'crypto';
@@ -460,7 +460,7 @@ const start = async () => {
               
               const el = await page.$(targetSelector);
               if (!el) {
-                send({ type: 'error', message: Selector not found on page:  });
+                send({ type: 'error', message: `Selector not found on page: ${targetSelector}` });
                 return;
               }
 
@@ -491,7 +491,7 @@ const start = async () => {
                   lastHash = hash;
                   
                   pageCount++;
-                  const filename = page-.png;
+                  const filename = `page-${String(pageCount).padStart(4, '0')}.png`;
                   require('fs').writeFileSync(require('path').join(destDir, filename), screenshotBuf);
                   
                   // Extract assets scoped to element
@@ -554,7 +554,7 @@ const start = async () => {
                   
                   result.urls.forEach((u: string) => recordedUrls.add(u));
                   if (result.html) {
-                    const htmlFilename = "page-${String(pageCount).padStart(4, '0')}.xhtml";
+                    const htmlFilename = `page-${String(pageCount).padStart(4, '0')}.xhtml`;
                     require('fs').writeFileSync(require('path').join(destDir, htmlFilename), result.html);
                   }
                   send({ type: 'recording_status', count: recordedUrls.size, screenshots: pageCount, jobId: recordingJobId });
@@ -579,7 +579,7 @@ const start = async () => {
               try {
                 if (browserContext) {
                   const cookieList = await browserContext.cookies();
-                  sessionCookies = cookieList.map((c: any) => ${c.name}=).join('; ');
+                  sessionCookies = cookieList.map((c: any) => `${c.name}=${c.value}`).join('; ');
                 }
               } catch(e: any) {}
               send({ type: 'recorded_urls', urls: Array.from(recordedUrls), cookies: sessionCookies });
