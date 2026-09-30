@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+﻿import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Page, BrowserContext } from 'playwright';
@@ -18,7 +18,20 @@ export class CambridgeReaderEngine {
    * A. VISIBLE IFRAME DISCOVERY
    * ========================================================== */
   async listVisibleIframes() {
-    return this.page.evaluate((sel) => {
+    let frameToEvaluate = this.page.mainFrame();
+    
+    let el = await this.page.$(this.selector);
+    if (!el) {
+      for (const frame of this.page.frames()) {
+        const frameEl = await frame.$(this.selector);
+        if (frameEl) {
+          frameToEvaluate = frame;
+          break;
+        }
+      }
+    }
+
+    return frameToEvaluate.evaluate((sel) => {
       const root = document.querySelector(sel) || document.body;
       if (!document.querySelector(sel)) {
          console.warn(`Selector not found: ${sel}, falling back to document.body`);
@@ -176,6 +189,19 @@ export class CambridgeReaderEngine {
   async captureSingleImage(outDir: string, onProgress?: (msg: string) => void) {
     if (onProgress) onProgress(`[single-test] 1/5 Looking for selector "${this.selector}"...`);
     let el = await this.page.$(this.selector);
+    
+    if (!el) {
+      if (onProgress) onProgress(`[single-test] Selector not in main frame, searching all ${this.page.frames().length} iframes...`);
+      for (const frame of this.page.frames()) {
+        const frameEl = await frame.$(this.selector);
+        if (frameEl) {
+          el = frameEl;
+          if (onProgress) onProgress(`[single-test] ✅ Found selector inside an iframe! (${frame.url()})`);
+          break;
+        }
+      }
+    }
+
     let buf: Buffer;
 
     if (el) {
