@@ -197,7 +197,17 @@ export class CambridgeReaderEngine {
     if (el) {
       const box = await el.boundingBox();
       if (onProgress) onProgress(`[single-test] ✅ Found. Size: ${box ? Math.round(box.width) : 0}x${box ? Math.round(box.height) : 0}px`);
-      if (onProgress) onProgress('[single-test] 2/5 Taking element screenshot...');
+      
+      const frameUrl = await el.evaluate(() => window.location.href);
+      if (onProgress) onProgress(`[single-test] 2/5 Harvesting DOM/Assets for: ${frameUrl}`);
+      try {
+        await this.harvestPage(frameUrl, outDir);
+        if (onProgress) onProgress(`[single-test] ✅ Successfully harvested assets!`);
+      } catch(e: any) {
+         if (onProgress) onProgress(`[single-test] ❌ Harvest failed: ${e.message}`);
+      }
+
+      if (onProgress) onProgress('[single-test] 3/5 Taking element screenshot as bonus...');
       buf = await el.screenshot({ type: 'png' });
     } else {
       if (onProgress) onProgress(`[single-test] ❌ FAIL: selector not found on page. Falling back to viewport screenshot.`);
