@@ -82,7 +82,7 @@ export class CambridgeReaderEngine {
     // We cannot easily do recursion inside the evaluate without making it complex,
     // so we handle saveAsset locally by fetching buffer via page.evaluate
     const saveAsset = async (rawUrl: string, parentUrl: string): Promise<string> => {
-      const abs = new URL(rawUrl, parentUrl).href.split('#')[0];
+      const abs = new URL(rawUrl, parentUrl).href.split('#')[0]!;
       if (assetMap.has(abs)) return assetMap.get(abs) as string;
       const buf = await this.fetchBuf(abs);
       const fname = `asset-${String(assetMap.size + 1).padStart(3, '0')}.${this.guessExt(abs, buf)}`;
@@ -91,8 +91,8 @@ export class CambridgeReaderEngine {
 
       if (fname.endsWith('.css')) {
         let css = buf.toString('utf8');
-        const refs = [...css.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map(m => m[1])
-          .concat([...css.matchAll(/@import\s+["']([^"']+)["']/g)].map(m => m[1]));
+        const refs = [...css.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map(m => m[1]!)
+          .concat([...css.matchAll(/@import\s+["']([^"']+)["']/g)].map(m => m[1]!));
         for (const ref of refs) {
           if (!ref || ref.startsWith('data:')) continue;
           const local = await saveAsset(ref, abs);   
@@ -110,7 +110,7 @@ export class CambridgeReaderEngine {
       ...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi),  // scripts
       ...html.matchAll(/<image[^>]+xlink:href=["']([^"']+)["']/gi), // SVG-embedded
       ...html.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g),   // inline styles
-    ].map(m => m[1]).filter((u): u is string => !!u && !u.startsWith('data:'));
+    ].map(m => m[1]!).filter((u): u is string => !!u && !u.startsWith('data:'));
 
     const localNames: Record<string, string> = {};
     for (const ref of refs) {
@@ -230,9 +230,9 @@ export class CambridgeReaderEngine {
 
   guessExt(url: string, buf: Buffer) {
     const m = url.match(/\.(png|jpe?g|webp|svg|gif|css|xhtml?|html|js|woff2?|ttf|otf|mp3|mp4)(\?|$)/i);
-    if (m) return m[1].toLowerCase().replace('jpeg', 'jpg');
+    if (m) return m[1]!.toLowerCase().replace('jpeg', 'jpg');
     if (buf && buf.length > 3) {
-      if (buf[0] === 0x89 && buf[1] === 0x50) return 'png';
+      if (buf && buf[0] === 0x89 && buf[1] === 0x50) return 'png';
       if (buf[0] === 0xff && buf[1] === 0xd8) return 'jpg';
       if (buf.slice(0, 4).toString() === 'RIFF') return 'webp';
       if (buf.slice(0, 4).toString() === 'wOFF' || buf.slice(0, 4).toString() === 'OTTO') return 'woff';
