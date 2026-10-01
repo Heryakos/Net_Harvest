@@ -324,6 +324,47 @@ export class CambridgeReaderEngine {
     }
     
     if (onProgress) onProgress(`[auto-flip] ✅ Successfully captured ${results.length} spreads!`);
+    
+    if (results.length > 0) {
+      if (onProgress) onProgress(`[auto-flip] 📦 Creating merged PDF...`);
+      try {
+        const mergedDir = path.join(baseOutDir, 'merged_spread');
+        fs.mkdirSync(mergedDir, { recursive: true });
+        
+        const { PDFDocument } = require('pdf-lib');
+        const pdfDoc = await PDFDocument.create();
+        
+        for (let i = 1; i <= results.length; i++) {
+          const spreadDir = path.join(baseOutDir, `spread-${i}`);
+          const pngPath = path.join(spreadDir, `spread-${i}.png`);
+          
+          if (fs.existsSync(pngPath)) {
+            const copyPath = path.join(mergedDir, `spread-${i}.png`);
+            fs.copyFileSync(pngPath, copyPath);
+            
+            const pngImageBytes = fs.readFileSync(pngPath);
+            const pngImage = await pdfDoc.embedPng(pngImageBytes);
+            const pngDims = pngImage.scale(1);
+            
+            const page = pdfDoc.addPage([pngDims.width, pngDims.height]);
+            page.drawImage(pngImage, {
+              x: 0,
+              y: 0,
+              width: pngDims.width,
+              height: pngDims.height,
+            });
+          }
+        }
+        
+        const pdfBytes = await pdfDoc.save();
+        const pdfPath = path.join(mergedDir, 'merged.pdf');
+        fs.writeFileSync(pdfPath, pdfBytes);
+        if (onProgress) onProgress(`[auto-flip] ✅ Saved merged.pdf!`);
+      } catch (e: any) {
+        if (onProgress) onProgress(`[auto-flip] ⚠️ Failed to generate PDF: ${e.message}`);
+      }
+    }
+
     return results;
   }
 
