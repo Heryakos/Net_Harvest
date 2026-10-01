@@ -72,7 +72,7 @@ export class CambridgeReaderEngine {
   /* ============================================================
    * B. SELF-CONTAINED PAGE HARVEST
    * ========================================================== */
-  async harvestPage(xhtmlUrl: string, outDir: string) {
+  async harvestPage(xhtmlUrl: string, outDir: string, liveHtml?: string) {
     fs.mkdirSync(outDir, { recursive: true });
     const assetDir = path.join(outDir, 'assets');
     fs.mkdirSync(assetDir, { recursive: true });
@@ -103,7 +103,7 @@ export class CambridgeReaderEngine {
       return fname;
     };
 
-    const html = await this.fetchText(xhtmlUrl);
+    const html = liveHtml || await this.fetchText(xhtmlUrl);
     const refs = [
       ...html.matchAll(/<link[^>]+href=["']([^"']+)["']/gi),   // CSS
       ...html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi),     // images
@@ -269,9 +269,10 @@ export class CambridgeReaderEngine {
       }
 
       const frameUrl = await el.evaluate(() => window.location.href);
+      const liveHtml = await el.evaluate((node) => node.ownerDocument.documentElement.outerHTML);
       if (onProgress) onProgress(`[auto-flip] Harvesting: ${frameUrl}`);
       try {
-        const pkg = await this.harvestPage(frameUrl, spreadDir);
+        const pkg = await this.harvestPage(frameUrl, spreadDir, liveHtml);
         
         // Take screenshot
         if (onProgress) onProgress(`[auto-flip] Taking screenshot of spread ${i}...`);
