@@ -494,11 +494,12 @@ const start = async () => {
               const jobId = msg.jobId || 'interactive_' + Date.now();
               const destDir = require('path').join(process.cwd(), 'data', 'downloads', jobId);
               const maxPages = Number(msg.maxPages) || 5;
+              const nextButtonSelector = msg.nextButtonSelector || '';
               
               send({ type: 'capture_log', log: `Starting auto-flip capture for ${maxPages} spreads...` });
               
               try {
-                const results = await engine.captureAutoFlip(destDir, maxPages, (progress: string) => {
+                const results = await engine.captureAutoFlip(destDir, maxPages, nextButtonSelector, (progress: string) => {
                   send({ type: 'capture_log', log: progress });
                 });
                 

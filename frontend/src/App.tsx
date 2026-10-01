@@ -46,6 +46,7 @@ export default function App() {
   const [sameOriginOnly, setSameOriginOnly] = useState(true);
   const [crawlSpeed, setCrawlSpeed] = useState<'slow' | 'medium' | 'fast'>('medium');
   const [targetSelector, setTargetSelector] = useState('');
+  const [nextButtonSelector, setNextButtonSelector] = useState('');
   const [candidateSelectors, setCandidateSelectors] = useState<string[]>([]);
   const [seedUrls, setSeedUrls] = useState<string[]>([]);
   const [isPicking, setIsPicking] = useState(false);
@@ -446,7 +447,7 @@ export default function App() {
                             setCaptureLogs([]);
                             setCaptureResults(null);
                             setIsCapturing(true);
-                            sendWs({ type: 'capture_auto_flip', targetSelector: targetSelector.trim() || undefined, maxPages: 5 });
+                            sendWs({ type: 'capture_auto_flip', targetSelector: targetSelector.trim() || undefined, nextButtonSelector: nextButtonSelector.trim() || undefined, maxPages: 5 });
                           }} title="Automatically click 'Next' and capture 5 spreads in a row!" style={{
                             background: isCapturing ? 'rgba(59,130,246,0.2)' : 'rgba(167,139,250,0.2)', 
                             color: isCapturing ? '#60a5fa' : '#c084fc', 
@@ -460,10 +461,16 @@ export default function App() {
                     </div>
                   </label>
                   <input list="candidate-selectors" className="input-glass" value={targetSelector} onChange={e => setTargetSelector(e.target.value)}
-                    placeholder="e.g. #readium-right-content or #gallery" style={{ marginBottom: seedUrls.length > 0 ? '8px' : '20px' }} />
+                    placeholder="e.g. #readium-right-content or #gallery" style={{ marginBottom: '8px' }} />
                   <datalist id="candidate-selectors">
                     {candidateSelectors.map(s => <option key={s} value={s} />)}
                   </datalist>
+
+                  <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '0.9rem' }}>
+                    <span>➡️ Next Page Button / Scroller Selector (Optional)</span>
+                  </label>
+                  <input className="input-glass" value={nextButtonSelector} onChange={e => setNextButtonSelector(e.target.value)}
+                    placeholder="e.g. .swiper-button-next or #next-page" style={{ marginBottom: seedUrls.length > 0 ? '8px' : '20px' }} />
 
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '20px' }}>
                     {isPicking ? <span style={{ color: '#60a5fa' }}>Hover over the interactive browser on the right and click the container you want.</span>

@@ -239,7 +239,7 @@ export class CambridgeReaderEngine {
   /* ============================================================
    * AUTO-FLIP BULK CAPTURE
    * ========================================================== */
-  async captureAutoFlip(baseOutDir: string, maxPages: number, onProgress?: (msg: string) => void) {
+  async captureAutoFlip(baseOutDir: string, maxPages: number, nextButtonSelector: string, onProgress?: (msg: string) => void) {
     const results = [];
     const fs = require('fs');
     const path = require('path');
@@ -252,27 +252,58 @@ export class CambridgeReaderEngine {
       const spreadDir = path.join(baseOutDir, `spread-${i}`);
       fs.mkdirSync(spreadDir, { recursive: true });
       
-      const frames = await this.listVisibleIframes();
-      if (!frames.length) {
-        if (onProgress) onProgress(`[auto-flip] ⚠️ No visible pages found on spread ${i}. Stopping.`);
+      let el = await this.page.$(this.selector);
+      if (!el) {
+        for (const frame of this.page.frames()) {
+          const frameEl = await frame.$(this.selector);
+          if (frameEl) {
+            el = frameEl;
+            break;
+          }
+        }
+      }
+      
+      if (!el) {
+        if (onProgress) onProgress(`[auto-flip] ⚠️ Target selector not found on spread ${i}. Stopping.`);
         break;
       }
-      
-      let assetsCount = 0;
-      for (const f of frames) {
-        if (onProgress) onProgress(`[auto-flip] Harvesting: ${f.src}`);
-        const pkg = await this.harvestPage(f.src, spreadDir);
-        assetsCount += pkg.assets + 1;
+
+      const frameUrl = await el.evaluate(() => window.location.href);
+      if (onProgress) onProgress(`[auto-flip] Harvesting: ${frameUrl}`);
+      try {
+        const pkg = await this.harvestPage(frameUrl, spreadDir);
+        results.push({ page: `spread-${i}`, assets: pkg.assets + 1, outDir: spreadDir });
+      } catch (e: any) {
+        if (onProgress) onProgress(`[auto-flip] ❌ Harvest failed: ${e.message}`);
+        break;
       }
-      
-      results.push({ page: `spread-${i}`, assets: assetsCount, outDir: spreadDir });
 
       if (i < maxPages) {
-        if (onProgress) onProgress(`[auto-flip] Flipping to next page (ArrowRight + Click edge)...`);
-        await this.page.keyboard.press('ArrowRight').catch(()=>{});
-        const viewport = this.page.viewportSize();
-        if (viewport) {
-           await this.page.mouse.click(viewport.width - 20, viewport.height / 2).catch(()=>{});
+        if (nextButtonSelector) {
+           if (onProgress) onProgress(`[auto-flip] Clicking next button: ${nextButtonSelector}`);
+           let nextBtn = await this.page.$(nextButtonSelector);
+           if (!nextBtn) {
+             for (const frame of this.page.frames()) {
+               const frameNextBtn = await frame.$(nextButtonSelector);
+               if (frameNextBtn) {
+                 nextBtn = frameNextBtn;
+                 break;
+               }
+             }
+           }
+           if (nextBtn) {
+             await nextBtn.click().catch(() => {});
+           } else {
+             if (onProgress) onProgress(`[auto-flip] ⚠️ Next button not found! Falling back to ArrowRight...`);
+             await this.page.keyboard.press('ArrowRight').catch(()=>{});
+           }
+        } else {
+          if (onProgress) onProgress(`[auto-flip] Flipping to next page (ArrowRight + Click edge)...`);
+          await this.page.keyboard.press('ArrowRight').catch(()=>{});
+          const viewport = this.page.viewportSize();
+          if (viewport) {
+             await this.page.mouse.click(viewport.width - 20, viewport.height / 2).catch(()=>{});
+          }
         }
         await this.page.waitForTimeout(2500); 
       }
