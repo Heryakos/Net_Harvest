@@ -84,7 +84,7 @@ fastify.post('/api/preview', async (request, reply) => {
     const extractor = new Extractor();
     const { urls: rawUrls } = await extractor.extractNetwork(url, 3000, {
       maxPages: Math.min(Number(maxPages) || 1, 5),   // cap preview at 5 pages
-      targetSelector
+      ...(targetSelector ? { targetSelector } : {})
     });
     const filterEngine = new URLFilter(filters || []);
     const allowed = rawUrls.filter(u => filterEngine.isAllowed(u));
@@ -139,7 +139,8 @@ fastify.post('/api/detect', async (request, reply) => {
         const pathname = new URL(u).pathname.toLowerCase();
         const ext = '.' + pathname.split('.').pop();
         const category = EXT_MAP[ext] ?? 'Other';
-        categories[category].add(ext);
+        const catSet = categories[category as keyof typeof categories];
+        if (catSet) catSet.add(ext);
       } catch {}
     }
 
@@ -199,7 +200,7 @@ const start = async () => {
                   candidates.add('#' + CSS.escape(el.id));
                 } else if (el.className && typeof el.className === 'string') {
                   const classes = el.className.trim().split(/\s+/).filter(Boolean);
-                  if (classes.length > 0) candidates.add('.' + CSS.escape(classes[0]));
+                  if (classes.length > 0) candidates.add('.' + CSS.escape(classes[0]!));
                 } else {
                   candidates.add(el.tagName.toLowerCase());
                 }
@@ -233,8 +234,9 @@ const start = async () => {
           deviceScaleFactor: 2, // High DPI (Retina) for crisp screenshots
           userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
         });
-        page = browserContext.pages().length > 0 ? browserContext.pages()[0] : await browserContext.newPage();
+        page = (browserContext!.pages().length > 0 ? browserContext!.pages()[0]! : await browserContext!.newPage()) as Page;
 
+        if (!page) return;
         page.on('console', msg => console.log(`[Browser Console] ${msg.type()}: ${msg.text()}`));
         page.on('pageerror', err => console.error(`[Browser Error] ${err.message}`));
 
