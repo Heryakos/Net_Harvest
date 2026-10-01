@@ -272,6 +272,19 @@ export class CambridgeReaderEngine {
       if (onProgress) onProgress(`[auto-flip] Harvesting: ${frameUrl}`);
       try {
         const pkg = await this.harvestPage(frameUrl, spreadDir);
+        
+        // Take screenshot
+        if (onProgress) onProgress(`[auto-flip] Taking screenshot of spread ${i}...`);
+        let buf: Buffer;
+        const box = await el.boundingBox();
+        if (box) {
+          buf = await this.page.screenshot({ type: 'png', clip: box });
+        } else {
+          buf = await el.screenshot({ type: 'png' });
+        }
+        const pngPath = path.join(spreadDir, `spread-${i}.png`);
+        fs.writeFileSync(pngPath, buf);
+
         results.push({ page: `spread-${i}`, assets: pkg.assets + 1, outDir: spreadDir });
       } catch (e: any) {
         if (onProgress) onProgress(`[auto-flip] ❌ Harvest failed: ${e.message}`);
