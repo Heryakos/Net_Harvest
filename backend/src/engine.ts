@@ -239,15 +239,17 @@ export class CambridgeReaderEngine {
   /* ============================================================
    * AUTO-FLIP BULK CAPTURE
    * ========================================================== */
-  async captureAutoFlip(baseOutDir: string, maxPages: number, nextButtonSelector: string, onProgress?: (msg: string) => void) {
+  async captureAutoFlip(baseOutDir: string, maxPages: number, nextButtonSelector: string, pdfOnlyMode: boolean, onProgress?: (msg: string, current?: number, total?: number) => void) {
     const results = [];
     const fs = require('fs');
     const path = require('path');
     
     await this.page.evaluate(() => window.focus()).catch(()=>{});
 
+    const displayMax = maxPages > 9000 ? 'Unlimited' : maxPages;
+
     for (let i = 1; i <= maxPages; i++) {
-      if (onProgress) onProgress(`[auto-flip] Capturing spread ${i}/${maxPages}...`);
+      if (onProgress) onProgress(`[auto-flip] Capturing spread ${i}/${displayMax}...`, i, maxPages);
       
       const spreadDir = path.join(baseOutDir, `spread-${i}`);
       fs.mkdirSync(spreadDir, { recursive: true });
@@ -264,18 +266,22 @@ export class CambridgeReaderEngine {
       }
       
       if (!el) {
-        if (onProgress) onProgress(`[auto-flip] ⚠️ Target selector not found on spread ${i}. Stopping.`);
+        if (onProgress) onProgress(`[auto-flip] ⚠️ Target selector not found on spread ${i}. Stopping.`, i, maxPages);
         break;
       }
 
-      const frameUrl = await el.evaluate(() => window.location.href);
-      const liveHtml = await el.evaluate((node) => node.ownerDocument.documentElement.outerHTML);
-      if (onProgress) onProgress(`[auto-flip] Harvesting: ${frameUrl}`);
+      let assetsCount = 0;
       try {
-        const pkg = await this.harvestPage(frameUrl, spreadDir, liveHtml);
-        
+        if (!pdfOnlyMode) {
+          const frameUrl = await el.evaluate(() => window.location.href);
+          const liveHtml = await el.evaluate((node) => node.ownerDocument.documentElement.outerHTML);
+          if (onProgress) onProgress(`[auto-flip] Harvesting HTML & Assets...`, i, maxPages);
+          const pkg = await this.harvestPage(frameUrl, spreadDir, liveHtml);
+          assetsCount = pkg.assets;
+        }
+
         // Take screenshot
-        if (onProgress) onProgress(`[auto-flip] Taking screenshot of spread ${i}...`);
+        if (onProgress) onProgress(`[auto-flip] Taking high-res screenshot of spread ${i}...`, i, maxPages);
         let buf: Buffer;
         const box = await el.boundingBox();
         if (box) {
@@ -286,9 +292,9 @@ export class CambridgeReaderEngine {
         const pngPath = path.join(spreadDir, `spread-${i}.png`);
         fs.writeFileSync(pngPath, buf);
 
-        results.push({ page: `spread-${i}`, assets: pkg.assets + 1, outDir: spreadDir });
+        results.push({ page: `spread-${i}`, assets: assetsCount + 1, outDir: spreadDir });
       } catch (e: any) {
-        if (onProgress) onProgress(`[auto-flip] ❌ Harvest failed: ${e.message}`);
+        if (onProgress) onProgress(`[auto-flip] ❌ Harvest failed: ${e.message}`, i, maxPages);
         break;
       }
 
@@ -305,41 +311,44 @@ export class CambridgeReaderEngine {
              }
            }
            if (nextBtn) {
-             // Check if it's visible or interactable
              const isVisible = await nextBtn.isVisible();
-             // In some readers, they disable it by adding a class or disabled attribute, let's also check if it's disabled or hidden by opacity/pointer-events
              const isDisabledOrHidden = await nextBtn.evaluate((el: any) => {
                const style = window.getComputedStyle(el);
                return el.disabled || style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0' || style.pointerEvents === 'none' || el.classList.contains('disabled');
              });
 
              if (!isVisible || isDisabledOrHidden) {
-                if (onProgress) onProgress(`[auto-flip] 🛑 End of book reached! (Next button is hidden/disabled). Stopping early at spread ${i}.`);
+                if (onProgress) onProgress(`[auto-flip] 🛑 End of book reached! (Next button is hidden/disabled). Stopping early at spread ${i}.`, i, maxPages);
                 break;
              }
 
-             if (onProgress) onProgress(`[auto-flip] Clicking next button: ${nextButtonSelector}`);
+             if (onProgress) onProgress(`[auto-flip] Clicking next button & waiting for page load...`, i, maxPages);
              await nextBtn.click().catch(() => {});
            } else {
-             if (onProgress) onProgress(`[auto-flip] 🛑 End of book reached! (Next button not found). Stopping early at spread ${i}.`);
+             if (onProgress) onProgress(`[auto-flip] 🛑 End of book reached! (Next button not found). Stopping early at spread ${i}.`, i, maxPages);
              break;
            }
         } else {
-          if (onProgress) onProgress(`[auto-flip] Flipping to next page (ArrowRight + Click edge)...`);
+          if (onProgress) onProgress(`[auto-flip] Flipping to next page (ArrowRight + Click edge)...`, i, maxPages);
           await this.page.keyboard.press('ArrowRight').catch(()=>{});
           const viewport = this.page.viewportSize();
           if (viewport) {
              await this.page.mouse.click(viewport.width - 20, viewport.height / 2).catch(()=>{});
           }
         }
-        await this.page.waitForTimeout(2500); 
+        
+        // Wait dynamically for the next page to load instead of hard 2.5s
+        await this.page.waitForTimeout(400); // Give it a brief moment to start animating
+        try {
+          await this.page.waitForLoadState('networkidle', { timeout: 2000 });
+        } catch (e) {} // ignore timeout, it just means some tracking scripts are still loading
       }
     }
     
-    if (onProgress) onProgress(`[auto-flip] ✅ Successfully captured ${results.length} spreads!`);
+    if (onProgress) onProgress(`[auto-flip] ✅ Successfully captured ${results.length} spreads!`, results.length, maxPages);
     
     if (results.length > 0) {
-      if (onProgress) onProgress(`[auto-flip] 📦 Creating merged PDF...`);
+      if (onProgress) onProgress(`[auto-flip] 📦 Compiling ${results.length} high-res images into PDF...`, results.length, maxPages);
       try {
         const mergedDir = path.join(baseOutDir, 'merged_spread');
         fs.mkdirSync(mergedDir, { recursive: true });
@@ -372,9 +381,9 @@ export class CambridgeReaderEngine {
         const pdfBytes = await pdfDoc.save();
         const pdfPath = path.join(mergedDir, 'merged.pdf');
         fs.writeFileSync(pdfPath, pdfBytes);
-        if (onProgress) onProgress(`[auto-flip] ✅ Saved merged.pdf!`);
+        if (onProgress) onProgress(`[auto-flip] ✅ PDF Generation Complete! Saved merged.pdf!`, results.length, maxPages);
       } catch (e: any) {
-        if (onProgress) onProgress(`[auto-flip] ⚠️ Failed to generate PDF: ${e.message}`);
+        if (onProgress) onProgress(`[auto-flip] ⚠️ Failed to generate PDF: ${e.message}`, results.length, maxPages);
       }
     }
 

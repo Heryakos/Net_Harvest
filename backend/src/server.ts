@@ -494,14 +494,15 @@ const start = async () => {
               
               const jobId = msg.jobId || 'interactive_' + Date.now();
               const destDir = require('path').join(process.cwd(), 'data', 'downloads', jobId);
-              const maxPages = Number(msg.maxPages) || 5;
+              const maxPages = Number(msg.maxPages) || 99999;
               const nextButtonSelector = msg.nextButtonSelector || '';
+              const pdfOnlyMode = Boolean(msg.pdfOnlyMode);
               
-              send({ type: 'capture_log', log: `Starting auto-flip capture for ${maxPages} spreads...` });
+              send({ type: 'capture_log', log: `Starting auto-flip capture (Max: ${maxPages > 9000 ? 'Unlimited' : maxPages} spreads)...` });
               
               try {
-                const results = await engine.captureAutoFlip(destDir, maxPages, nextButtonSelector, (progress: string) => {
-                  send({ type: 'capture_log', log: progress });
+                const results = await engine.captureAutoFlip(destDir, maxPages, nextButtonSelector, pdfOnlyMode, (log: string, current?: number, total?: number) => {
+                  send({ type: 'capture_log', log, current, total });
                 });
                 
                 send({ type: 'capture_success', results, jobId });

@@ -59,8 +59,10 @@ export default function App() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [captureLogs, setCaptureLogs] = useState<string[]>([]);
+  const [captureProgress, setCaptureProgress] = useState<{ current: number, total: number } | null>(null);
   const [captureResults, setCaptureResults] = useState<any[] | null>(null);
   const [captureJobId, setCaptureJobId] = useState<string>('');
+  const [pdfOnlyMode, setPdfOnlyMode] = useState(false);
 
   // WS Interactive browser
   const [wsConnected, setWsConnected] = useState(false);
@@ -247,6 +249,9 @@ export default function App() {
       }
       else if (msg.type === 'capture_log') {
         setCaptureLogs(prev => [...prev, msg.log]);
+        if (msg.current !== undefined && msg.total !== undefined) {
+           setCaptureProgress({ current: msg.current, total: msg.total });
+        }
       }
       else if (msg.type === 'capture_success') {
         setCaptureResults(msg.results);
@@ -446,17 +451,19 @@ export default function App() {
                           <button onClick={() => {
                             if (isCapturing) return;
                             setCaptureLogs([]);
+                            setCaptureProgress(null);
                             setCaptureResults(null);
                             setIsCapturing(true);
-                            const parsedMaxPages = parseInt(autoFlipMaxPages) || 100;
-                            sendWs({ type: 'capture_auto_flip', targetSelector: targetSelector.trim() || undefined, nextButtonSelector: nextButtonSelector.trim() || undefined, maxPages: parsedMaxPages });
-                          }} title={`Automatically click 'Next' and capture up to ${autoFlipMaxPages || 100} spreads in a row!`} style={{
+                            const parsedMaxPages = autoFlipMaxPages.trim() === '' ? 99999 : (parseInt(autoFlipMaxPages) || 100);
+                            sendWs({ type: 'capture_auto_flip', targetSelector: targetSelector.trim() || undefined, nextButtonSelector: nextButtonSelector.trim() || undefined, maxPages: parsedMaxPages, pdfOnlyMode });
+                          }} title={`Automatically click 'Next' and capture ${autoFlipMaxPages.trim() === '' ? 'ALL' : autoFlipMaxPages} spreads in a row!`} style={{
                             background: isCapturing ? 'rgba(59,130,246,0.2)' : 'rgba(167,139,250,0.2)', 
                             color: isCapturing ? '#60a5fa' : '#c084fc', 
                             border: `1px solid ${isCapturing ? 'rgba(59,130,246,0.4)' : 'rgba(167,139,250,0.4)'}`, 
-                            borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: isCapturing ? 'not-allowed' : 'pointer'
+                            borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: isCapturing ? 'not-allowed' : 'pointer',
+                            marginTop: '10px'
                           }}>
-                            {isCapturing ? `⏳ Flipping...` : `🚀 Auto-Flip Bulk (${autoFlipMaxPages || 100} Pages)`}
+                            {isCapturing ? `⏳ Flipping...` : `🚀 Auto-Flip Bulk (${autoFlipMaxPages.trim() === '' ? 'Unlimited' : autoFlipMaxPages} Pages)`}
                           </button>
                         </>
                       )}
@@ -468,17 +475,34 @@ export default function App() {
                     {candidateSelectors.map(s => <option key={s} value={s} />)}
                   </datalist>
 
-                  <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '0.9rem' }}>
-                    <span>➡️ Next Page Button / Scroller Selector (Optional)</span>
+                  <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '0.9rem' }} title="If the page has a button to go to the next page, enter its CSS selector here (e.g. #stdNext for Cambridge Reader). If left empty, it will try hitting the ArrowRight key.">
+                    <span>➡️ Next Page Button / Scroller <span style={{ color: '#94a3b8', cursor: 'help' }}>(?)</span></span>
                   </label>
                   <input className="input-glass" value={nextButtonSelector} onChange={e => setNextButtonSelector(e.target.value)}
-                    placeholder="e.g. .swiper-button-next or #next-page" style={{ marginBottom: '8px' }} />
+                    placeholder="e.g. .swiper-button-next or #stdNext" style={{ marginBottom: '8px' }} />
 
-                  <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '0.9rem' }}>
-                    <span>📚 Max Pages to Capture</span>
+                  <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '0.9rem' }} title="Leave blank for UNLIMITED (will stop when the Next button disappears). Or enter a number like 100 to stop early.">
+                    <span>📚 Max Pages to Capture <span style={{ color: '#94a3b8', cursor: 'help' }}>(?)</span></span>
                   </label>
-                  <input type="number" min="1" max="9999" className="input-glass" value={autoFlipMaxPages} onChange={e => setAutoFlipMaxPages(e.target.value)}
-                    placeholder="e.g. 100" style={{ marginBottom: seedUrls.length > 0 ? '8px' : '20px' }} />
+                  <input type="number" min="1" max="99999" className="input-glass" value={autoFlipMaxPages} onChange={e => setAutoFlipMaxPages(e.target.value)}
+                    placeholder="Leave blank for UNLIMITED" style={{ marginBottom: '12px' }} />
+
+                  <label style={{ display: 'flex', alignItems: 'center', marginBottom: seedUrls.length > 0 ? '8px' : '20px', fontSize: '0.9rem', cursor: 'pointer' }} title="Skip downloading HTML/CSS and only capture high-res screenshots for the final PDF. This makes extraction 5x faster!">
+                    <input type="checkbox" checked={pdfOnlyMode} onChange={e => setPdfOnlyMode(e.target.checked)} style={{ marginRight: '8px', accentColor: '#10b981' }} />
+                    <span style={{ color: pdfOnlyMode ? '#10b981' : 'white' }}>⚡ Turbo Mode (PDF Only, Fastest)</span>
+                  </label>
+
+                  {isCapturing && captureProgress && captureProgress.total && (
+                    <div style={{ marginBottom: '15px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>
+                         <span>Progress: {captureProgress.current} / {captureProgress.total > 9000 ? 'Unlimited' : captureProgress.total}</span>
+                         <span>{Math.round((captureProgress.current / (captureProgress.total > 9000 ? captureProgress.current : captureProgress.total)) * 100) || 0}%</span>
+                      </div>
+                      <div style={{ width: '100%', height: '8px', background: '#1e293b', borderRadius: '4px', overflow: 'hidden' }}>
+                         <div style={{ height: '100%', background: '#60a5fa', width: `${Math.round((captureProgress.current / (captureProgress.total > 9000 ? captureProgress.current : captureProgress.total)) * 100) || 0}%`, transition: 'width 0.3s ease' }}></div>
+                      </div>
+                    </div>
+                  )}
 
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '20px' }}>
                     {isPicking ? <span style={{ color: '#60a5fa' }}>Hover over the interactive browser on the right and click the container you want.</span>
