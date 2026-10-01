@@ -47,7 +47,7 @@ export default function App() {
   const [crawlSpeed, setCrawlSpeed] = useState<'slow' | 'medium' | 'fast'>('medium');
   const [targetSelector, setTargetSelector] = useState('');
   const [nextButtonSelector, setNextButtonSelector] = useState('');
-  const [maxPages, setMaxPages] = useState('100');
+  const [autoFlipMaxPages, setAutoFlipMaxPages] = useState('100');
   const [candidateSelectors, setCandidateSelectors] = useState<string[]>([]);
   const [seedUrls, setSeedUrls] = useState<string[]>([]);
   const [isPicking, setIsPicking] = useState(false);
@@ -448,15 +448,15 @@ export default function App() {
                             setCaptureLogs([]);
                             setCaptureResults(null);
                             setIsCapturing(true);
-                            const parsedMaxPages = parseInt(maxPages) || 100;
+                            const parsedMaxPages = parseInt(autoFlipMaxPages) || 100;
                             sendWs({ type: 'capture_auto_flip', targetSelector: targetSelector.trim() || undefined, nextButtonSelector: nextButtonSelector.trim() || undefined, maxPages: parsedMaxPages });
-                          }} title={`Automatically click 'Next' and capture up to ${maxPages || 100} spreads in a row!`} style={{
+                          }} title={`Automatically click 'Next' and capture up to ${autoFlipMaxPages || 100} spreads in a row!`} style={{
                             background: isCapturing ? 'rgba(59,130,246,0.2)' : 'rgba(167,139,250,0.2)', 
                             color: isCapturing ? '#60a5fa' : '#c084fc', 
                             border: `1px solid ${isCapturing ? 'rgba(59,130,246,0.4)' : 'rgba(167,139,250,0.4)'}`, 
                             borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: isCapturing ? 'not-allowed' : 'pointer'
                           }}>
-                            {isCapturing ? `⏳ Flipping...` : `🚀 Auto-Flip Bulk (${maxPages || 100} Pages)`}
+                            {isCapturing ? `⏳ Flipping...` : `🚀 Auto-Flip Bulk (${autoFlipMaxPages || 100} Pages)`}
                           </button>
                         </>
                       )}
@@ -477,7 +477,7 @@ export default function App() {
                   <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '0.9rem' }}>
                     <span>📚 Max Pages to Capture</span>
                   </label>
-                  <input type="number" min="1" max="9999" className="input-glass" value={maxPages} onChange={e => setMaxPages(e.target.value)}
+                  <input type="number" min="1" max="9999" className="input-glass" value={autoFlipMaxPages} onChange={e => setAutoFlipMaxPages(e.target.value)}
                     placeholder="e.g. 100" style={{ marginBottom: seedUrls.length > 0 ? '8px' : '20px' }} />
 
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '20px' }}>
