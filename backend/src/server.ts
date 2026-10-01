@@ -229,7 +229,8 @@ const start = async () => {
 
         browserContext = await chromium.launchPersistentContext(userDataDir, {
           headless: true,
-          viewport: { width: 1280, height: 720 },
+          viewport: { width: 1920, height: 1080 },
+          deviceScaleFactor: 2, // High DPI (Retina) for crisp screenshots
           userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
         });
         page = browserContext.pages().length > 0 ? browserContext.pages()[0] : await browserContext.newPage();
