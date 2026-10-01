@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import Database, { Database as SqliteDatabase } from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
@@ -12,7 +12,7 @@ if (!fs.existsSync(dir)) {
 }
 
 // Open the database connection synchronously
-export const db = new Database(dbPath);
+export const db: SqliteDatabase = new Database(dbPath);
 
 // Enable Write-Ahead Logging for better concurrent read/write performance
 db.pragma('journal_mode = WAL');

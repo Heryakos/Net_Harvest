@@ -19,7 +19,7 @@ export interface Resource {
 
 export const JobModel = {
   createJob(id: string, startUrl: string): Job {
-    const stmt = db.prepare('INSERT INTO jobs (id, status, startUrl) VALUES (?, ?, ?)');
+    const stmt = db.prepare('INSERT OR IGNORE INTO jobs (id, status, startUrl) VALUES (?, ?, ?)');
     stmt.run(id, 'running', startUrl);
     return this.getJob(id)!;
   },
