@@ -236,6 +236,52 @@ export class CambridgeReaderEngine {
     return [{ page: 'single-capture.png', assets: assetsCount, outDir }];
   }
 
+  /* ============================================================
+   * AUTO-FLIP BULK CAPTURE
+   * ========================================================== */
+  async captureAutoFlip(baseOutDir: string, maxPages: number, onProgress?: (msg: string) => void) {
+    const results = [];
+    const fs = require('fs');
+    const path = require('path');
+    
+    await this.page.evaluate(() => window.focus()).catch(()=>{});
+
+    for (let i = 1; i <= maxPages; i++) {
+      if (onProgress) onProgress(`[auto-flip] Capturing spread ${i}/${maxPages}...`);
+      
+      const spreadDir = path.join(baseOutDir, `spread-${i}`);
+      fs.mkdirSync(spreadDir, { recursive: true });
+      
+      const frames = await this.listVisibleIframes();
+      if (!frames.length) {
+        if (onProgress) onProgress(`[auto-flip] ⚠️ No visible pages found on spread ${i}. Stopping.`);
+        break;
+      }
+      
+      let assetsCount = 0;
+      for (const f of frames) {
+        if (onProgress) onProgress(`[auto-flip] Harvesting: ${f.src}`);
+        const pkg = await this.harvestPage(f.src, spreadDir);
+        assetsCount += pkg.assets + 1;
+      }
+      
+      results.push({ page: `spread-${i}`, assets: assetsCount, outDir: spreadDir });
+
+      if (i < maxPages) {
+        if (onProgress) onProgress(`[auto-flip] Flipping to next page (ArrowRight + Click edge)...`);
+        await this.page.keyboard.press('ArrowRight').catch(()=>{});
+        const viewport = this.page.viewportSize();
+        if (viewport) {
+           await this.page.mouse.click(viewport.width - 20, viewport.height / 2).catch(()=>{});
+        }
+        await this.page.waitForTimeout(2500); 
+      }
+    }
+    
+    if (onProgress) onProgress(`[auto-flip] ✅ Successfully captured ${results.length} spreads!`);
+    return results;
+  }
+
   guessExt(url: string, buf: Buffer) {
     const m = url.match(/\.(png|jpe?g|webp|svg|gif|css|xhtml?|html|js|woff2?|ttf|otf|mp3|mp4)(\?|$)/i);
     if (m) return m[1]!.toLowerCase().replace('jpeg', 'jpg');

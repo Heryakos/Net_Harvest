@@ -482,6 +482,34 @@ const start = async () => {
               break;
             }
 
+            case 'capture_auto_flip': {
+              if (!page) {
+                send({ type: 'error', message: 'No active browser page' });
+                return;
+              }
+              const { CambridgeReaderEngine } = require('./engine');
+              const engine = new CambridgeReaderEngine(page);
+              engine.selector = msg.targetSelector || '#readium-right-content';
+              
+              const jobId = msg.jobId || 'interactive_' + Date.now();
+              const destDir = require('path').join(process.cwd(), 'data', 'downloads', jobId);
+              const maxPages = Number(msg.maxPages) || 5;
+              
+              send({ type: 'capture_log', log: `Starting auto-flip capture for ${maxPages} spreads...` });
+              
+              try {
+                const results = await engine.captureAutoFlip(destDir, maxPages, (progress: string) => {
+                  send({ type: 'capture_log', log: progress });
+                });
+                
+                send({ type: 'capture_success', results, jobId });
+              } catch (e: any) {
+                send({ type: 'capture_log', log: `ERROR: ${e.message}` });
+                send({ type: 'error', message: e.message });
+              }
+              break;
+            }
+
             case 'test_single_image': {
               if (!page) {
                 send({ type: 'error', message: 'No active browser page' });

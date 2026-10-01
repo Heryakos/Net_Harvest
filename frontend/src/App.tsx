@@ -441,6 +441,20 @@ export default function App() {
                           }}>
                             {isCapturing ? `⏳ Capturing...` : '📸 Capture Spread (Full)'}
                           </button>
+                          <button onClick={() => {
+                            if (isCapturing) return;
+                            setCaptureLogs([]);
+                            setCaptureResults(null);
+                            setIsCapturing(true);
+                            sendWs({ type: 'capture_auto_flip', targetSelector: targetSelector.trim() || undefined, maxPages: 5 });
+                          }} title="Automatically click 'Next' and capture 5 spreads in a row!" style={{
+                            background: isCapturing ? 'rgba(59,130,246,0.2)' : 'rgba(167,139,250,0.2)', 
+                            color: isCapturing ? '#60a5fa' : '#c084fc', 
+                            border: `1px solid ${isCapturing ? 'rgba(59,130,246,0.4)' : 'rgba(167,139,250,0.4)'}`, 
+                            borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: isCapturing ? 'not-allowed' : 'pointer'
+                          }}>
+                            {isCapturing ? `⏳ Flipping...` : '🚀 Auto-Flip Bulk (5 Pages)'}
+                          </button>
                         </>
                       )}
                     </div>
