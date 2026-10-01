@@ -210,7 +210,6 @@ export class CambridgeReaderEngine {
       }
 
       if (onProgress) onProgress('[single-test] 3/5 Taking element screenshot as bonus...');
-      const box = await el.boundingBox();
       if (box) {
         // Workaround for Playwright nested iframe element.screenshot() bugs: 
         // take a full page screenshot and clip it using the element's bounding box
