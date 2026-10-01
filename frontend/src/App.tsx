@@ -149,6 +149,18 @@ export default function App() {
   const startJob = async () => {
     disconnectBrowser();
 
+    if (captureJobId && captureResults && captureResults.length > 0) {
+      // The interactive browser already harvested the assets directly to disk.
+      // Skip the background crawler and just show the results.
+      setActiveJobId(captureJobId);
+      const totalAssets = captureResults.reduce((sum, r) => sum + (r.assets || 0), 0);
+      setJobStats({ crawled: captureResults.length, max: captureResults.length, resourcesFound: totalAssets });
+      setJobStatus('completed');
+      setDownloadReady(true);
+      setStep(3);
+      return;
+    }
+
     try {
       const res = await fetch('http://localhost:3000/api/jobs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
