@@ -1,4 +1,4 @@
-﻿import crypto from 'crypto';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Page, BrowserContext } from 'playwright';
@@ -193,6 +193,7 @@ export class CambridgeReaderEngine {
     }
 
     let buf: Buffer;
+    let assetsCount = 0;
 
     if (el) {
       const box = await el.boundingBox();
@@ -201,7 +202,8 @@ export class CambridgeReaderEngine {
       const frameUrl = await el.evaluate(() => window.location.href);
       if (onProgress) onProgress(`[single-test] 2/5 Harvesting DOM/Assets for: ${frameUrl}`);
       try {
-        await this.harvestPage(frameUrl, outDir);
+        const pkg = await this.harvestPage(frameUrl, outDir);
+        assetsCount = pkg.assets + 1; // +1 for the HTML file itself
         if (onProgress) onProgress(`[single-test] ✅ Successfully harvested assets!`);
       } catch(e: any) {
          if (onProgress) onProgress(`[single-test] ❌ Harvest failed: ${e.message}`);
@@ -225,7 +227,7 @@ export class CambridgeReaderEngine {
     if (onProgress) onProgress(`[single-test] 3/5 Saved → ${pngPath}`);
 
     if (onProgress) onProgress('[single-test] 4/5 Zipped via server logic.');
-    return [{ page: 'single-capture.png', assets: 0, outDir }];
+    return [{ page: 'single-capture.png', assets: assetsCount, outDir }];
   }
 
   guessExt(url: string, buf: Buffer) {

@@ -28,7 +28,22 @@ export function buildJobZip(jobId: string): Promise<string> {
     };
 
     if (!resources || resources.length === 0) {
-      return reject(new Error('No downloaded files found for this job.'));
+      // Fallback: Check if the directory exists directly (used by interactive test_single_image)
+      const directDir = path.join(process.cwd(), 'data', 'downloads', jobId);
+      if (!fs.existsSync(directDir)) {
+        return reject(new Error('No downloaded files found for this job.'));
+      }
+      
+      const tmpPath = path.join(os.tmpdir(), `job-${jobId}.zip`);
+      const output = fs.createWriteStream(tmpPath);
+      const archive = new ZipArchive({ zlib: { level: 6 } });
+      output.on('close', () => resolve(tmpPath));
+      output.on('error', reject);
+      archive.on('error', reject);
+      archive.pipe(output);
+      archive.directory(directDir, false);
+      archive.finalize();
+      return;
     }
 
     // Write to a temp file so we can stream it reliably afterwards
