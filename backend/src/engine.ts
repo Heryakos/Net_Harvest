@@ -210,7 +210,14 @@ export class CambridgeReaderEngine {
       }
 
       if (onProgress) onProgress('[single-test] 3/5 Taking element screenshot as bonus...');
-      buf = await el.screenshot({ type: 'png' });
+      const box = await el.boundingBox();
+      if (box) {
+        // Workaround for Playwright nested iframe element.screenshot() bugs: 
+        // take a full page screenshot and clip it using the element's bounding box
+        buf = await this.page.screenshot({ type: 'png', clip: box });
+      } else {
+        buf = await el.screenshot({ type: 'png' });
+      }
     } else {
       if (onProgress) onProgress(`[single-test] ❌ FAIL: selector not found on page. Falling back to viewport screenshot.`);
       if (onProgress) onProgress('[single-test] 2/5 Taking viewport screenshot...');
