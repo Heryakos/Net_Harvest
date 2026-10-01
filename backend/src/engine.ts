@@ -294,7 +294,6 @@ export class CambridgeReaderEngine {
 
       if (i < maxPages) {
         if (nextButtonSelector) {
-           if (onProgress) onProgress(`[auto-flip] Clicking next button: ${nextButtonSelector}`);
            let nextBtn = await this.page.$(nextButtonSelector);
            if (!nextBtn) {
              for (const frame of this.page.frames()) {
@@ -306,10 +305,24 @@ export class CambridgeReaderEngine {
              }
            }
            if (nextBtn) {
+             // Check if it's visible or interactable
+             const isVisible = await nextBtn.isVisible();
+             // In some readers, they disable it by adding a class or disabled attribute, let's also check if it's disabled or hidden by opacity/pointer-events
+             const isDisabledOrHidden = await nextBtn.evaluate((el: any) => {
+               const style = window.getComputedStyle(el);
+               return el.disabled || style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0' || style.pointerEvents === 'none' || el.classList.contains('disabled');
+             });
+
+             if (!isVisible || isDisabledOrHidden) {
+                if (onProgress) onProgress(`[auto-flip] 🛑 End of book reached! (Next button is hidden/disabled). Stopping early at spread ${i}.`);
+                break;
+             }
+
+             if (onProgress) onProgress(`[auto-flip] Clicking next button: ${nextButtonSelector}`);
              await nextBtn.click().catch(() => {});
            } else {
-             if (onProgress) onProgress(`[auto-flip] ⚠️ Next button not found! Falling back to ArrowRight...`);
-             await this.page.keyboard.press('ArrowRight').catch(()=>{});
+             if (onProgress) onProgress(`[auto-flip] 🛑 End of book reached! (Next button not found). Stopping early at spread ${i}.`);
+             break;
            }
         } else {
           if (onProgress) onProgress(`[auto-flip] Flipping to next page (ArrowRight + Click edge)...`);
