@@ -173,6 +173,8 @@ const start = async () => {
       let recordInterval: NodeJS.Timeout | null = null;
       const sessionResources = new Map<string, string>();
       const recordedUrls = new Set<string>();
+      let cancelCaptureFlag = false;
+      let skipPagesCount = 0;
 
       const send = (msg: object) => {
         if (socket.readyState === WebSocket.OPEN) {
@@ -485,6 +487,14 @@ const start = async () => {
               break;
             }
 
+            case 'cancel_capture':
+              cancelCaptureFlag = true;
+              break;
+              
+            case 'skip_pages':
+              skipPagesCount = Number(msg.skipCount) || 1;
+              break;
+
             case 'capture_auto_flip': {
               if (!page) {
                 send({ type: 'error', message: 'No active browser page' });
@@ -502,10 +512,21 @@ const start = async () => {
               
               send({ type: 'capture_log', log: `Starting auto-flip capture (Max: ${maxPages > 9000 ? 'Unlimited' : maxPages} spreads)...` });
               
+              cancelCaptureFlag = false;
+              skipPagesCount = 0;
+              
               try {
-                const results = await engine.captureAutoFlip(destDir, maxPages, nextButtonSelector, pdfOnlyMode, (log: string, current?: number, total?: number) => {
-                  send({ type: 'capture_log', log, current, total });
-                });
+                const results = await engine.captureAutoFlip(
+                  destDir, 
+                  maxPages, 
+                  nextButtonSelector, 
+                  pdfOnlyMode,
+                  () => cancelCaptureFlag,
+                  () => { const skip = skipPagesCount; skipPagesCount = 0; return skip; },
+                  (log: string, current?: number, total?: number) => {
+                    send({ type: 'capture_log', log, current, total });
+                  }
+                );
                 
                 send({ type: 'capture_success', results, jobId });
               } catch (e: any) {

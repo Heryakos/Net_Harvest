@@ -48,6 +48,7 @@ export default function App() {
   const [targetSelector, setTargetSelector] = useState('');
   const [nextButtonSelector, setNextButtonSelector] = useState('');
   const [autoFlipMaxPages, setAutoFlipMaxPages] = useState('100');
+  const [skipPagesCount, setSkipPagesCount] = useState('0');
   const [candidateSelectors, setCandidateSelectors] = useState<string[]>([]);
   const [seedUrls, setSeedUrls] = useState<string[]>([]);
   const [isPicking, setIsPicking] = useState(false);
@@ -455,6 +456,10 @@ export default function App() {
                             setCaptureResults(null);
                             setIsCapturing(true);
                             const parsedMaxPages = autoFlipMaxPages.trim() === '' ? 99999 : (parseInt(autoFlipMaxPages) || 100);
+                            const parsedSkip = parseInt(skipPagesCount) || 0;
+                            if (parsedSkip > 0) {
+                              sendWs({ type: 'skip_pages', skipCount: parsedSkip });
+                            }
                             sendWs({ type: 'capture_auto_flip', targetSelector: targetSelector.trim() || undefined, nextButtonSelector: nextButtonSelector.trim() || undefined, maxPages: parsedMaxPages, pdfOnlyMode });
                           }} title={`Automatically click 'Next' and capture ${autoFlipMaxPages.trim() === '' ? 'ALL' : autoFlipMaxPages} spreads in a row!`} style={{
                             background: isCapturing ? 'rgba(59,130,246,0.2)' : 'rgba(167,139,250,0.2)', 
@@ -487,19 +492,46 @@ export default function App() {
                   <input type="number" min="1" max="99999" className="input-glass" value={autoFlipMaxPages} onChange={e => setAutoFlipMaxPages(e.target.value)}
                     placeholder="Leave blank for UNLIMITED" style={{ marginBottom: '12px' }} />
 
+                  <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '0.9rem' }} title="If you want to skip a certain number of pages BEFORE starting the capture, enter the number here.">
+                    <span>⏭️ Skip First X Spreads <span style={{ color: '#94a3b8', cursor: 'help' }}>(?)</span></span>
+                  </label>
+                  <input type="number" min="0" max="9999" className="input-glass" value={skipPagesCount} onChange={e => setSkipPagesCount(e.target.value)}
+                    placeholder="e.g. 5" style={{ marginBottom: '12px' }} />
+
                   <label style={{ display: 'flex', alignItems: 'center', marginBottom: seedUrls.length > 0 ? '8px' : '20px', fontSize: '0.9rem', cursor: 'pointer' }} title="Skip downloading HTML/CSS and only capture high-res screenshots for the final PDF. This makes extraction 5x faster!">
                     <input type="checkbox" checked={pdfOnlyMode} onChange={e => setPdfOnlyMode(e.target.checked)} style={{ marginRight: '8px', accentColor: '#10b981' }} />
                     <span style={{ color: pdfOnlyMode ? '#10b981' : 'white' }}>⚡ Turbo Mode (PDF Only, Fastest)</span>
                   </label>
 
-                  {isCapturing && captureProgress && captureProgress.total && (
-                    <div style={{ marginBottom: '15px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>
-                         <span>Progress: {captureProgress.current} / {captureProgress.total > 9000 ? 'Unlimited' : captureProgress.total}</span>
-                         <span>{Math.round((captureProgress.current / (captureProgress.total > 9000 ? captureProgress.current : captureProgress.total)) * 100) || 0}%</span>
-                      </div>
-                      <div style={{ width: '100%', height: '8px', background: '#1e293b', borderRadius: '4px', overflow: 'hidden' }}>
-                         <div style={{ height: '100%', background: '#60a5fa', width: `${Math.round((captureProgress.current / (captureProgress.total > 9000 ? captureProgress.current : captureProgress.total)) * 100) || 0}%`, transition: 'width 0.3s ease' }}></div>
+                  {isCapturing && (
+                    <div style={{ marginBottom: '15px', padding: '10px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '6px', border: '1px solid #1e293b' }}>
+                      {captureProgress && captureProgress.total && (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>
+                             <span>Progress: {captureProgress.current} / {captureProgress.total > 9000 ? 'Unlimited' : captureProgress.total}</span>
+                             <span>{Math.round((captureProgress.current / (captureProgress.total > 9000 ? captureProgress.current : captureProgress.total)) * 100) || 0}%</span>
+                          </div>
+                          <div style={{ width: '100%', height: '8px', background: '#0f172a', borderRadius: '4px', overflow: 'hidden', marginBottom: '10px' }}>
+                             <div style={{ height: '100%', background: '#60a5fa', width: `${Math.round((captureProgress.current / (captureProgress.total > 9000 ? captureProgress.current : captureProgress.total)) * 100) || 0}%`, transition: 'width 0.3s ease' }}></div>
+                          </div>
+                        </>
+                      )}
+                      
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={() => {
+                          sendWs({ type: 'cancel_capture' });
+                        }} title="Safely stop after the current page and generate the PDF" style={{
+                          flex: 1, background: 'rgba(239,68,68,0.2)', color: '#f87171', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '4px', padding: '4px', fontSize: '0.75rem', cursor: 'pointer'
+                        }}>
+                          🛑 Stop Safely
+                        </button>
+                        <button onClick={() => {
+                          sendWs({ type: 'skip_pages', skipCount: 1 });
+                        }} title="Skip the next page without capturing it" style={{
+                          flex: 1, background: 'rgba(245,158,11,0.2)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.4)', borderRadius: '4px', padding: '4px', fontSize: '0.75rem', cursor: 'pointer'
+                        }}>
+                          ⏭️ Skip Next Page
+                        </button>
                       </div>
                     </div>
                   )}

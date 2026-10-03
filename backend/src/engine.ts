@@ -239,7 +239,15 @@ export class CambridgeReaderEngine {
   /* ============================================================
    * AUTO-FLIP BULK CAPTURE
    * ========================================================== */
-  async captureAutoFlip(baseOutDir: string, maxPages: number, nextButtonSelector: string, pdfOnlyMode: boolean, onProgress?: (msg: string, current?: number, total?: number) => void) {
+  async captureAutoFlip(
+    baseOutDir: string, 
+    maxPages: number, 
+    nextButtonSelector: string, 
+    pdfOnlyMode: boolean, 
+    isCancelled: () => boolean,
+    getSkipCount: () => number,
+    onProgress?: (msg: string, current?: number, total?: number) => void
+  ) {
     const results = [];
     const fs = require('fs');
     const path = require('path');
@@ -249,6 +257,27 @@ export class CambridgeReaderEngine {
     const displayMax = maxPages > 9000 ? 'Unlimited' : maxPages;
 
     for (let i = 1; i <= maxPages; i++) {
+      if (isCancelled()) {
+        if (onProgress) onProgress(`[auto-flip] 🛑 User cancelled capture. Stopping early at spread ${i - 1}.`, i - 1, maxPages);
+        break;
+      }
+
+      const skips = getSkipCount();
+      if (skips > 0) {
+        if (onProgress) onProgress(`[auto-flip] ⏭️ Skipping ${skips} spread(s)...`, i, maxPages);
+        for (let s = 0; s < skips; s++) {
+          if (nextButtonSelector) {
+            const nextBtn = await this.page.$(nextButtonSelector).catch(()=>null);
+            if (nextBtn) await nextBtn.click().catch(() => {});
+          } else {
+            await this.page.keyboard.press('ArrowRight').catch(()=>{});
+          }
+          await this.page.waitForTimeout(400);
+          try { await this.page.waitForLoadState('networkidle', { timeout: 2000 }); } catch (e) {}
+        }
+        if (onProgress) onProgress(`[auto-flip] ⏭️ Finished skipping. Resuming capture...`, i, maxPages);
+      }
+
       if (onProgress) onProgress(`[auto-flip] Capturing spread ${i}/${displayMax}...`, i, maxPages);
       
       const spreadDir = path.join(baseOutDir, `spread-${i}`);
