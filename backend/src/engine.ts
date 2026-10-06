@@ -313,9 +313,14 @@ export class CambridgeReaderEngine {
         let buf: Buffer;
         const box = await el.boundingBox();
         if (box) {
-          buf = await this.page.screenshot({ type: 'png', clip: box });
+          try {
+            buf = await this.page.screenshot({ type: 'png', clip: box, animations: 'disabled', timeout: 10000 });
+          } catch (err) {
+            console.log("[auto-flip] page.screenshot timed out or failed, falling back to el.screenshot...");
+            buf = await el.screenshot({ type: 'png', animations: 'disabled', timeout: 15000 });
+          }
         } else {
-          buf = await el.screenshot({ type: 'png' });
+          buf = await el.screenshot({ type: 'png', animations: 'disabled', timeout: 15000 });
         }
         const pngPath = path.join(spreadDir, `spread-${i}.png`);
         fs.writeFileSync(pngPath, buf);
