@@ -847,8 +847,20 @@ export default function App() {
                       {(jobStatus === 'completed' && jobStats.crawled < (jobStats.max || 1)) && ` (This is less than your ${jobStats.max} max limit because there were no more links to find!)`}
                     </div>
                   )}
+                  
+                  <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '6px', color: '#60a5fa' }}>Rename Downloaded ZIP (Optional)</label>
+                  <input className="input-glass" 
+                    placeholder="e.g. Cambridge_Math_Book" 
+                    id="downloadFilenameInput"
+                    style={{ width: '100%', marginBottom: '16px', padding: '10px' }} 
+                  />
+
                   <button className="btn-primary"
-                    onClick={() => window.location.href = `http://localhost:3000/api/jobs/${activeJobId}/download`}
+                    onClick={() => {
+                      const input = document.getElementById('downloadFilenameInput') as HTMLInputElement;
+                      const fn = input?.value ? encodeURIComponent(input.value) : '';
+                      window.location.href = `http://localhost:3000/api/jobs/${activeJobId}/download${fn ? '?filename=' + fn : ''}`;
+                    }}
                     style={{ width: '100%', padding: '16px', fontSize: '1.1rem', transform: isHovering ? 'scale(1.02)' : 'scale(1)', transition: 'transform 0.2s' }}
                     onMouseEnter={() => setIsHovering(true)} onMouseLeave={() => setIsHovering(false)}>
                     📦 Download ZIP Archive

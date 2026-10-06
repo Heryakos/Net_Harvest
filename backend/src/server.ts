@@ -62,10 +62,17 @@ fastify.post('/api/jobs/:id/cancel', async (request, reply) => {
 // â”€â”€â”€ Download ZIP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 fastify.get('/api/jobs/:id/download', async (request, reply) => {
   const { id } = request.params as { id: string };
+  const { filename } = request.query as { filename?: string };
   try {
     const zipPath = await buildJobZip(id);
     const stat = fs.statSync(zipPath);
-    reply.header('Content-Disposition', `attachment; filename="netharvest-${id}.zip"`);
+    
+    let downloadName = `netharvest-${id}.zip`;
+    if (filename && filename.trim() !== '') {
+      downloadName = filename.trim().endsWith('.zip') ? filename.trim() : `${filename.trim()}.zip`;
+    }
+    
+    reply.header('Content-Disposition', `attachment; filename="${downloadName}"`);
     reply.header('Content-Type', 'application/zip');
     reply.header('Content-Length', stat.size);
     return reply.send(fs.createReadStream(zipPath));

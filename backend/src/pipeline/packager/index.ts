@@ -83,6 +83,13 @@ export function buildJobZip(jobId: string): Promise<string> {
       archive.append(manifestCsv, { name: 'manifest.csv' });
     }
 
+    // ALWAYS include the compiled PDF, PPTX, and DOCX if they exist!
+    const mergedDir = path.join(process.cwd(), 'data', 'downloads', jobId, 'merged_spread');
+    if (fs.existsSync(mergedDir)) {
+      archive.directory(mergedDir, 'Compiled_Documents');
+      added++; // ensure we don't fail the added === 0 check
+    }
+
     if (added === 0) {
       return reject(new Error('No files exist on disk for this job.'));
     }
