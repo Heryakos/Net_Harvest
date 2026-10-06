@@ -344,7 +344,11 @@ export default function App() {
     const xPct = (moveX / renderWidth) * 100;
     const yPct = (moveY / renderHeight) * 100;
 
-    sendWs({ type: 'highlight_element', x: xPct, y: yPct });
+    if (isPicking) {
+      sendWs({ type: 'highlight_element', x: xPct, y: yPct });
+    } else {
+      sendWs({ type: 'mouse_move', x: xPct, y: yPct });
+    }
   };
 
   const handleScroll = (e: React.WheelEvent) => {
