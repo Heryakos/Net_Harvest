@@ -426,11 +426,61 @@ const start = async () => {
               break;
             case 'click': {
               const vp = page!.viewportSize() ?? { width: 1280, height: 720 };
-              await page!.mouse.click(
-                (msg.x / 100) * vp.width,
-                (msg.y / 100) * vp.height,
-                { delay: 50 }
-              );
+              const px = (msg.x / 100) * vp.width;
+              const py = (msg.y / 100) * vp.height;
+
+              // First move the mouse to the position (so hover states activate)
+              await page!.mouse.move(px, py);
+              await page!.waitForTimeout(60);
+
+              // Fire mouse events via JS so they penetrate into nested iframes
+              await page!.evaluate(({ x, y }: { x: number; y: number }) => {
+                const fireAt = (doc: Document, x: number, y: number) => {
+                  const opts: MouseEventInit = {
+                    bubbles: true, cancelable: true, view: doc.defaultView ?? undefined,
+                    clientX: x, clientY: y, screenX: x, screenY: y,
+                    buttons: 1, button: 0
+                  };
+                  const el = doc.elementFromPoint(x, y);
+                  if (!el) return;
+                  el.dispatchEvent(new MouseEvent('mousedown', opts));
+                  setTimeout(() => {
+                    el.dispatchEvent(new MouseEvent('mouseup', opts));
+                    el.dispatchEvent(new MouseEvent('click', opts));
+                  }, 60);
+                };
+
+                // Fire on main page
+                fireAt(document, x, y);
+
+                // Also fire inside every iframe that overlaps this coordinate
+                for (const iframe of Array.from(document.querySelectorAll('iframe'))) {
+                  try {
+                    const rect = iframe.getBoundingClientRect();
+                    if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+                      const iDoc = (iframe as HTMLIFrameElement).contentDocument;
+                      if (iDoc) {
+                        const lx = x - rect.left;
+                        const ly = y - rect.top;
+                        fireAt(iDoc, lx, ly);
+                        // Also check nested iframes
+                        for (const nested of Array.from(iDoc.querySelectorAll('iframe'))) {
+                          try {
+                            const nrect = nested.getBoundingClientRect();
+                            const nDoc = (nested as HTMLIFrameElement).contentDocument;
+                            if (nDoc && lx >= nrect.left && lx <= nrect.right && ly >= nrect.top && ly <= nrect.bottom) {
+                              fireAt(nDoc, lx - nrect.left, ly - nrect.top);
+                            }
+                          } catch {}
+                        }
+                      }
+                    }
+                  } catch {}
+                }
+              }, { x: px, y: py }).catch(() => {});
+
+              // Also do a real Playwright click in case the above isn't enough
+              await page!.mouse.click(px, py, { delay: 60 }).catch(() => {});
               break;
             }
 
