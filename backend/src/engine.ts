@@ -238,94 +238,102 @@ export class CambridgeReaderEngine {
 
   /* ============================================================
    * SMART PAGE-READY DETECTION
-   * Polls until the page content has changed from previous state
-   * AND all images inside the target element are fully loaded.
+   * Uses Playwright's server-side frame iteration to find the
+   * target selector across all nested iframes, then fingerprints
+   * the content and waits until it changes + images are loaded.
    * ========================================================== */
   async waitForPageReady(
     selector: string,
     maxWaitMs: number = 30000,
     onProgress?: (msg: string, current?: number, total?: number) => void
   ): Promise<void> {
-    // Step 1: Take a fingerprint of the current page (image srcs + text snippet)
+
+    // Find which frame contains the selector (server-side Playwright frame search)
+    const findFrame = async () => {
+      for (const frame of this.page.frames()) {
+        try {
+          const el = await frame.$(selector);
+          if (el) return frame;
+        } catch {}
+      }
+      return null;
+    };
+
+    // Get a fingerprint from the frame that contains the selector
     const getFingerprint = async (): Promise<string> => {
-      return await this.page.evaluate((sel: string) => {
-        const tryInDoc = (doc: Document): string | null => {
-          const el = doc.querySelector(sel);
-          if (!el) return null;
-          // Collect all img srcs and the first bit of text content
-          const imgs = Array.from(el.querySelectorAll('img'))
-            .map(img => img.src || img.getAttribute('src') || '')
-            .filter(Boolean)
-            .join('|');
-          const iframes = Array.from(el.querySelectorAll('iframe'))
-            .map(f => f.src || f.getAttribute('src') || '')
-            .filter(Boolean)
-            .join('|');
-          const text = (el.textContent || '').trim().slice(0, 200);
-          return imgs + '::' + iframes + '::' + text;
-        };
-        // Try main doc first
-        let fp = tryInDoc(document);
-        if (fp) return fp;
-        // Try frames
-        for (const frame of Array.from(window.frames)) {
-          try {
-            // @ts-ignore
-            const fDoc = frame.document;
-            if (fDoc) { const r = tryInDoc(fDoc); if (r) return r; }
-          } catch {}
-        }
-        return '';
+      const frame = await findFrame();
+      if (!frame) return '';
+      return await frame.evaluate((sel: string) => {
+        const el = document.querySelector(sel);
+        if (!el) return '';
+        // Collect iframe srcs inside the element (Cambridge Reader swaps these per page)
+        const iframes = Array.from(el.querySelectorAll('iframe'))
+          .map(f => f.src || f.getAttribute('src') || '')
+          .filter(Boolean).join('|');
+        // Collect img srcs  
+        const imgs = Array.from(el.querySelectorAll('img'))
+          .map(img => img.src || img.getAttribute('src') || '')
+          .filter(Boolean).join('|');
+        // Also grab textContent snippet
+        const text = (el.textContent || '').trim().slice(0, 300);
+        return iframes + '::' + imgs + '::' + text;
       }, selector).catch(() => '');
     };
 
-    // Step 2: Check if all images in the element are loaded
+    // Check if all images inside the selector are done loading
     const areImagesLoaded = async (): Promise<boolean> => {
-      return await this.page.evaluate((sel: string) => {
-        const checkImagesInDoc = (doc: Document): boolean => {
-          const el = doc.querySelector(sel);
-          if (!el) return false;
-          const imgs = Array.from(el.querySelectorAll('img'));
-          if (imgs.length === 0) return true; // no images = nothing to wait for
-          return imgs.every(img => img.complete && img.naturalWidth > 0);
+      const frame = await findFrame();
+      if (!frame) return false;
+      return await frame.evaluate((sel: string) => {
+        const el = document.querySelector(sel);
+        if (!el) return false;
+        // Also check inside any nested iframes within the element
+        const checkDoc = (doc: Document, innerSel: string): boolean => {
+          const target = doc.querySelector(innerSel);
+          if (!target) return true;
+          const imgs = Array.from(target.querySelectorAll('img'));
+          if (imgs.length === 0) return true;
+          return imgs.every(img => img.complete && (img as HTMLImageElement).naturalWidth > 0);
         };
-        if (checkImagesInDoc(document)) return true;
-        for (const frame of Array.from(window.frames)) {
+        if (!checkDoc(document, sel)) return false;
+        // Check inside child iframes too
+        for (const iframe of Array.from(el.querySelectorAll('iframe'))) {
           try {
-            // @ts-ignore
-            const fDoc = frame.document;
-            if (fDoc && checkImagesInDoc(fDoc)) return true;
+            const iDoc = (iframe as HTMLIFrameElement).contentDocument;
+            if (iDoc) {
+              const imgs = Array.from(iDoc.querySelectorAll('img'));
+              if (imgs.some(img => !img.complete || (img as HTMLImageElement).naturalWidth === 0)) return false;
+            }
           } catch {}
         }
-        return false;
+        return true;
       }, selector).catch(() => false);
     };
 
     const startFingerprint = await getFingerprint();
+    if (onProgress) onProgress(`[auto-flip] 🔍 Fingerprint captured. Waiting for content to change...`);
+
     const deadline = Date.now() + maxWaitMs;
 
-    // Give the animation a moment to START before we start polling
+    // Give the page flip animation a moment to START
     await this.page.waitForTimeout(600);
 
     let contentChanged = false;
-    let imagesLoaded = false;
     let polls = 0;
 
     while (Date.now() < deadline) {
       polls++;
       const fp = await getFingerprint();
-      const imgs = await areImagesLoaded();
 
-      if (!contentChanged && fp !== startFingerprint && fp !== '') {
+      if (!contentChanged && fp !== '' && fp !== startFingerprint) {
         contentChanged = true;
-        if (onProgress) onProgress(`[auto-flip] ✅ Page content changed (detected on poll ${polls})`);
+        if (onProgress) onProgress(`[auto-flip] ✅ Page content changed (poll ${polls}). Waiting for images...`);
       }
 
       if (contentChanged) {
-        imagesLoaded = imgs;
-        if (imagesLoaded) {
+        const imgs = await areImagesLoaded();
+        if (imgs) {
           if (onProgress) onProgress(`[auto-flip] ✅ All images loaded! (poll ${polls})`);
-          // Small final settle time for rendering
           await this.page.waitForTimeout(300);
           return;
         }
@@ -334,9 +342,9 @@ export class CambridgeReaderEngine {
       await this.page.waitForTimeout(500);
     }
 
-    // Fallback: timed out — screenshot anyway with a warning
-    if (onProgress) onProgress(`[auto-flip] ⚠️ Timed out waiting for page (${maxWaitMs / 1000}s). Taking screenshot anyway.`);
-    await this.page.waitForTimeout(500);
+    // Fallback: timed out — screenshot anyway
+    if (onProgress) onProgress(`[auto-flip] ⚠️ Timed out (${maxWaitMs / 1000}s). Taking screenshot anyway.`);
+    await this.page.waitForTimeout(300);
   }
 
   /* ============================================================
