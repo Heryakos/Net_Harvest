@@ -244,17 +244,22 @@ const start = async () => {
 
         // Handle new tabs (target="_blank") so they don't open invisibly in the background
         page.on('popup', async (popup) => {
+          // Wait briefly for the popup URL to actually populate, otherwise it's 'about:blank'
+          await popup.waitForLoadState('domcontentloaded').catch(() => {});
           const popupUrl = popup.url();
-          // Navigate the main page to the new URL and close the invisible popup
-          await page!.goto(popupUrl, { waitUntil: 'load', timeout: 15000 }).catch(() => {});
-          send({ type: 'navigated', url: page!.url() });
-          sendCandidateSelectors();
+          if (popupUrl && popupUrl !== 'about:blank') {
+            await page!.goto(popupUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+            send({ type: 'navigated', url: page!.url() });
+            sendCandidateSelectors();
+          }
           await popup.close().catch(() => {});
         });
 
 
 
-        await page.goto(url, { waitUntil: 'load', timeout: 30000 }).catch(() => {});
+        let safeUrl = url;
+        if (!safeUrl.startsWith('http') && safeUrl !== 'about:blank') safeUrl = 'https://' + safeUrl;
+        await page.goto(safeUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
         screenshotInterval = setInterval(sendScreenshot, 200); // 5fps
 
         send({ type: 'session_ready', sessionId });
@@ -281,11 +286,14 @@ const start = async () => {
               await startSession(msg.url || 'about:blank');
               break;
 
-            case 'navigate':
-              await page!.goto(msg.url, { waitUntil: 'load', timeout: 15000 }).catch(() => {});
+            case 'navigate': {
+              let safeUrl = msg.url;
+              if (!safeUrl.startsWith('http') && safeUrl !== 'about:blank') safeUrl = 'https://' + safeUrl;
+              await page!.goto(safeUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
               send({ type: 'navigated', url: page!.url() });
               sendCandidateSelectors();
               break;
+            }
 
             case 'pick_element': {
               const vp = page!.viewportSize() ?? { width: 1280, height: 720 };
