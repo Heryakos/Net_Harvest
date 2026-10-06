@@ -1,4 +1,4 @@
-﻿export type FilterType = 'contains' | 'starts_with' | 'ends_with' | 'extension' | 'regex';
+export type FilterType = 'contains' | 'starts_with' | 'ends_with' | 'extension' | 'regex';
 
 export interface FilterRule {
   type: FilterType;
@@ -27,13 +27,15 @@ export class URLFilter {
     // But if you mix "extension" and "contains", it will act as an AND.
     if (includes.length > 0) {
       const groupedIncludes = includes.reduce((acc, rule) => {
-        acc[rule.type] = acc[rule.type] || [];
-        acc[rule.type].push(rule);
+        if (!acc[rule.type]) acc[rule.type] = [];
+        acc[rule.type]!.push(rule);
         return acc;
       }, {} as Record<string, FilterRule[]>);
 
       for (const type in groupedIncludes) {
         const rulesForType = groupedIncludes[type];
+        if (!rulesForType) continue;
+        
         const matchesAnyInGroup = rulesForType.some(rule => this.matches(url, rule));
         
         // If it fails to match ANY rule in this group, it's rejected.
@@ -60,7 +62,7 @@ export class URLFilter {
         try {
           if (urlStr.startsWith('data:')) {
             const mimeMatch = urlStr.match(/^data:(.*?);/);
-            if (mimeMatch) {
+            if (mimeMatch && mimeMatch[1]) {
               const mime = mimeMatch[1].toLowerCase();
               const targetExt = ext.replace('.', '').toLowerCase();
               if (mime.includes(targetExt)) return true;

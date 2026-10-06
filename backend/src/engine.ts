@@ -295,8 +295,7 @@ export class CambridgeReaderEngine {
       }
       
       if (!el) {
-        if (onProgress) onProgress(`[auto-flip] ⚠️ Target selector not found on spread ${i}. Stopping.`, i, maxPages);
-        break;
+        throw new Error(`Target selector "${this.selector}" was not found on the page! Make sure the book is fully loaded and you typed the correct selector.`);
       }
 
       let assetsCount = 0;
@@ -323,8 +322,7 @@ export class CambridgeReaderEngine {
 
         results.push({ page: `spread-${i}`, assets: assetsCount + 1, outDir: spreadDir });
       } catch (e: any) {
-        if (onProgress) onProgress(`[auto-flip] ❌ Harvest failed: ${e.message}`, i, maxPages);
-        break;
+        throw new Error(`Harvest failed: ${e.message}`);
       }
 
       if (i < maxPages) {
