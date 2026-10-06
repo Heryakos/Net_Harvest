@@ -312,16 +312,22 @@ export class CambridgeReaderEngine {
         if (onProgress) onProgress(`[auto-flip] Taking high-res screenshot of spread ${i}...`, i, maxPages);
         let buf: Buffer;
         const box = await el.boundingBox();
+        const client = await this.page.context().newCDPSession(this.page);
         if (box) {
           try {
-            buf = await this.page.screenshot({ type: 'png', clip: box, animations: 'disabled', timeout: 10000 });
+            const { data } = await client.send('Page.captureScreenshot', { 
+              format: 'png', 
+              clip: { x: box.x, y: box.y, width: box.width, height: box.height, scale: 1 } 
+            });
+            buf = Buffer.from(data, 'base64');
           } catch (err) {
-            console.log("[auto-flip] page.screenshot timed out or failed, falling back to el.screenshot...");
-            buf = await el.screenshot({ type: 'png', animations: 'disabled', timeout: 15000 });
+            console.log("[auto-flip] CDP screenshot failed, falling back to el.screenshot...", err);
+            buf = await el.screenshot({ type: 'png', timeout: 15000 });
           }
         } else {
-          buf = await el.screenshot({ type: 'png', animations: 'disabled', timeout: 15000 });
+          buf = await el.screenshot({ type: 'png', timeout: 15000 });
         }
+        await client.detach();
         const pngPath = path.join(spreadDir, `spread-${i}.png`);
         fs.writeFileSync(pngPath, buf);
 
