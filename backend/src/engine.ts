@@ -237,6 +237,109 @@ export class CambridgeReaderEngine {
   }
 
   /* ============================================================
+   * SMART PAGE-READY DETECTION
+   * Polls until the page content has changed from previous state
+   * AND all images inside the target element are fully loaded.
+   * ========================================================== */
+  async waitForPageReady(
+    selector: string,
+    maxWaitMs: number = 30000,
+    onProgress?: (msg: string, current?: number, total?: number) => void
+  ): Promise<void> {
+    // Step 1: Take a fingerprint of the current page (image srcs + text snippet)
+    const getFingerprint = async (): Promise<string> => {
+      return await this.page.evaluate((sel: string) => {
+        const tryInDoc = (doc: Document): string | null => {
+          const el = doc.querySelector(sel);
+          if (!el) return null;
+          // Collect all img srcs and the first bit of text content
+          const imgs = Array.from(el.querySelectorAll('img'))
+            .map(img => img.src || img.getAttribute('src') || '')
+            .filter(Boolean)
+            .join('|');
+          const iframes = Array.from(el.querySelectorAll('iframe'))
+            .map(f => f.src || f.getAttribute('src') || '')
+            .filter(Boolean)
+            .join('|');
+          const text = (el.textContent || '').trim().slice(0, 200);
+          return imgs + '::' + iframes + '::' + text;
+        };
+        // Try main doc first
+        let fp = tryInDoc(document);
+        if (fp) return fp;
+        // Try frames
+        for (const frame of Array.from(window.frames)) {
+          try {
+            // @ts-ignore
+            const fDoc = frame.document;
+            if (fDoc) { const r = tryInDoc(fDoc); if (r) return r; }
+          } catch {}
+        }
+        return '';
+      }, selector).catch(() => '');
+    };
+
+    // Step 2: Check if all images in the element are loaded
+    const areImagesLoaded = async (): Promise<boolean> => {
+      return await this.page.evaluate((sel: string) => {
+        const checkImagesInDoc = (doc: Document): boolean => {
+          const el = doc.querySelector(sel);
+          if (!el) return false;
+          const imgs = Array.from(el.querySelectorAll('img'));
+          if (imgs.length === 0) return true; // no images = nothing to wait for
+          return imgs.every(img => img.complete && img.naturalWidth > 0);
+        };
+        if (checkImagesInDoc(document)) return true;
+        for (const frame of Array.from(window.frames)) {
+          try {
+            // @ts-ignore
+            const fDoc = frame.document;
+            if (fDoc && checkImagesInDoc(fDoc)) return true;
+          } catch {}
+        }
+        return false;
+      }, selector).catch(() => false);
+    };
+
+    const startFingerprint = await getFingerprint();
+    const deadline = Date.now() + maxWaitMs;
+
+    // Give the animation a moment to START before we start polling
+    await this.page.waitForTimeout(600);
+
+    let contentChanged = false;
+    let imagesLoaded = false;
+    let polls = 0;
+
+    while (Date.now() < deadline) {
+      polls++;
+      const fp = await getFingerprint();
+      const imgs = await areImagesLoaded();
+
+      if (!contentChanged && fp !== startFingerprint && fp !== '') {
+        contentChanged = true;
+        if (onProgress) onProgress(`[auto-flip] ✅ Page content changed (detected on poll ${polls})`);
+      }
+
+      if (contentChanged) {
+        imagesLoaded = imgs;
+        if (imagesLoaded) {
+          if (onProgress) onProgress(`[auto-flip] ✅ All images loaded! (poll ${polls})`);
+          // Small final settle time for rendering
+          await this.page.waitForTimeout(300);
+          return;
+        }
+      }
+
+      await this.page.waitForTimeout(500);
+    }
+
+    // Fallback: timed out — screenshot anyway with a warning
+    if (onProgress) onProgress(`[auto-flip] ⚠️ Timed out waiting for page (${maxWaitMs / 1000}s). Taking screenshot anyway.`);
+    await this.page.waitForTimeout(500);
+  }
+
+  /* ============================================================
    * AUTO-FLIP BULK CAPTURE
    * ========================================================== */
   async captureAutoFlip(
@@ -375,13 +478,9 @@ export class CambridgeReaderEngine {
           }
         }
         
-        // Wait dynamically for the next page to load
-        await this.page.waitForTimeout(1000); // Give it a moment to start animating
-        try {
-          await this.page.waitForLoadState('networkidle', { timeout: 4000 });
-        } catch (e) {} // ignore timeout, it just means some tracking scripts are still loading
-        // Extra padding for images that load after networkidle
-        await this.page.waitForTimeout(1500);
+        // Smart wait: poll until page content changes AND all images are loaded
+        if (onProgress) onProgress(`[auto-flip] ⏳ Waiting for page ${i + 1} to fully load...`, i, maxPages);
+        await this.waitForPageReady(this.selector, 30000, onProgress);
       }
     }
     
