@@ -421,17 +421,18 @@ const start = async () => {
               const vp = page!.viewportSize() ?? { width: 1280, height: 720 };
               await page!.mouse.click(
                 (msg.x / 100) * vp.width,
-                (msg.y / 100) * vp.height
+                (msg.y / 100) * vp.height,
+                { delay: 50 }
               );
               break;
             }
 
             case 'type':
-              await page!.keyboard.type(String(msg.text ?? ''));
+              await page!.keyboard.type(String(msg.text ?? ''), { delay: 50 });
               break;
 
             case 'key':
-              await page!.keyboard.press(String(msg.key ?? 'Enter'));
+              await page!.keyboard.press(String(msg.key ?? 'Enter'), { delay: 50 });
               break;
 
             case 'scroll':
