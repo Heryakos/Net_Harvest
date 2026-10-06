@@ -35,7 +35,7 @@ const selectStyles = {
 
 export default function App() {
   const [step, setStep] = useState(1);
-  const [targetUrl, setTargetUrl] = useState('https://hiryakos-portfolio.vercel.app/');
+  const [targetUrl, setTargetUrl] = useState('https://www.cambridge.org/go/ereader/read/9781108964227/?groupId=0&bookid=2791&root=anon#book/2791');
   const [filters, setFilters] = useState<FilterRule[]>([]);
   const [preview, setPreview] = useState<{ allowed: string[]; blocked: string[] } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -45,9 +45,9 @@ export default function App() {
   const [maxPages, setMaxPages] = useState(1);
   const [sameOriginOnly, setSameOriginOnly] = useState(true);
   const [crawlSpeed, setCrawlSpeed] = useState<'slow' | 'medium' | 'fast'>('medium');
-  const [targetSelector, setTargetSelector] = useState('');
-  const [nextButtonSelector, setNextButtonSelector] = useState('');
-  const [autoFlipMaxPages, setAutoFlipMaxPages] = useState('100');
+  const [targetSelector, setTargetSelector] = useState('#readium-right-content');
+  const [nextButtonSelector, setNextButtonSelector] = useState('#stdNext');
+  const [autoFlipMaxPages, setAutoFlipMaxPages] = useState('');
   const [skipPagesCount, setSkipPagesCount] = useState('0');
   const [candidateSelectors, setCandidateSelectors] = useState<string[]>([]);
   const [seedUrls, setSeedUrls] = useState<string[]>([]);
@@ -63,7 +63,7 @@ export default function App() {
   const [captureProgress, setCaptureProgress] = useState<{ current: number, total: number } | null>(null);
   const [captureResults, setCaptureResults] = useState<any[] | null>(null);
   const [captureJobId, setCaptureJobId] = useState<string>('');
-  const [pdfOnlyMode, setPdfOnlyMode] = useState(false);
+  const [pdfOnlyMode, setPdfOnlyMode] = useState(true);
 
   // WS Interactive browser
   const [wsConnected, setWsConnected] = useState(false);
