@@ -763,24 +763,25 @@ export default function App() {
                 return null;
               })()}
 
+              {captureResults && (
+                <div style={{ padding: '16px', background: 'rgba(52,211,153,0.05)', borderRadius: '10px', marginBottom: '20px', border: '1px solid rgba(52,211,153,0.2)' }}>
+                  <h3 style={{ margin: '0 0 12px 0', color: '#10b981', fontSize: '1rem' }}>📦 Capture Ready! ({captureResults.length} spreads)</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
+                    {captureResults.map((res: any, idx: number) => (
+                      <div key={idx} style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', fontSize: '0.85rem', color: '#e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 'bold' }}>{res.page}</span>
+                        <span style={{ display: 'flex', gap: '12px' }}>
+                          <span style={{ color: '#34d399' }}>✓ Package ({res.assets} assets)</span>
+                          <span style={{ color: '#60a5fa' }}>✓ PNG Screenshot</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)', flex: 1 }} onClick={() => setStep(1)}>← Back</button>
-                {captureResults && (
-                  <div style={{ padding: '16px', background: 'rgba(52,211,153,0.05)', borderRadius: '10px', marginBottom: '20px', border: '1px solid rgba(52,211,153,0.2)' }}>
-                    <h3 style={{ margin: '0 0 12px 0', color: '#10b981', fontSize: '1rem' }}>📦 Capture Ready!</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {captureResults.map((res: any, idx: number) => (
-                        <div key={idx} style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', fontSize: '0.85rem', color: '#e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontWeight: 'bold' }}>{res.page}</span>
-                          <span style={{ display: 'flex', gap: '12px' }}>
-                            <span style={{ color: '#34d399' }}>✓ Package ({res.assets} assets)</span>
-                            <span style={{ color: '#60a5fa' }}>✓ PNG Screenshot</span>
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
                 <button className="btn-primary" style={{ flex: 2 }} onClick={startJob}>📦 Package to ZIP</button>
               </div>
             </div>

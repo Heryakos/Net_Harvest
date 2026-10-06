@@ -375,24 +375,33 @@ export class CambridgeReaderEngine {
           }
         }
         
-        // Wait dynamically for the next page to load instead of hard 2.5s
-        await this.page.waitForTimeout(400); // Give it a brief moment to start animating
+        // Wait dynamically for the next page to load
+        await this.page.waitForTimeout(1000); // Give it a moment to start animating
         try {
-          await this.page.waitForLoadState('networkidle', { timeout: 2000 });
+          await this.page.waitForLoadState('networkidle', { timeout: 4000 });
         } catch (e) {} // ignore timeout, it just means some tracking scripts are still loading
+        // Extra padding for images that load after networkidle
+        await this.page.waitForTimeout(1500);
       }
     }
     
     if (onProgress) onProgress(`[auto-flip] ✅ Successfully captured ${results.length} spreads!`, results.length, maxPages);
     
     if (results.length > 0) {
-      if (onProgress) onProgress(`[auto-flip] 📦 Compiling ${results.length} high-res images into PDF...`, results.length, maxPages);
+      if (onProgress) onProgress(`[auto-flip] 📦 Compiling ${results.length} high-res images into PDF, DOCX, and PPTX...`, results.length, maxPages);
       try {
         const mergedDir = path.join(baseOutDir, 'merged_spread');
         fs.mkdirSync(mergedDir, { recursive: true });
         
         const { PDFDocument } = require('pdf-lib');
         const pdfDoc = await PDFDocument.create();
+
+        const pptxgen = require('pptxgenjs');
+        const pres = new pptxgen();
+
+        const { Document, Packer, Paragraph, ImageRun } = require('docx');
+        const docxChildren: any[] = [];
+        const sizeOf = require('image-size');
         
         for (let i = 1; i <= results.length; i++) {
           const spreadDir = path.join(baseOutDir, `spread-${i}`);
@@ -403,9 +412,10 @@ export class CambridgeReaderEngine {
             fs.copyFileSync(pngPath, copyPath);
             
             const pngImageBytes = fs.readFileSync(pngPath);
+            
+            // 1. PDF
             const pngImage = await pdfDoc.embedPng(pngImageBytes);
             const pngDims = pngImage.scale(1);
-            
             const page = pdfDoc.addPage([pngDims.width, pngDims.height]);
             page.drawImage(pngImage, {
               x: 0,
@@ -413,15 +423,46 @@ export class CambridgeReaderEngine {
               width: pngDims.width,
               height: pngDims.height,
             });
+
+            // 2. PPTX
+            if (i === 1) {
+              const aspect = pngDims.width / pngDims.height;
+              pres.defineLayout({ name: 'CUSTOM', width: aspect * 10, height: 10 });
+              pres.layout = 'CUSTOM';
+            }
+            const slide = pres.addSlide();
+            const base64Str = 'image/png;base64,' + pngImageBytes.toString('base64');
+            slide.addImage({ data: base64Str, x: 0, y: 0, w: '100%', h: '100%' });
+
+            // 3. DOCX
+            const dimensions = sizeOf(pngPath);
+            docxChildren.push(new Paragraph({
+              children: [
+                new ImageRun({
+                  data: pngImageBytes,
+                  transformation: {
+                    width: 600,
+                    height: (600 / dimensions.width) * dimensions.height
+                  }
+                })
+              ]
+            }));
           }
         }
         
         const pdfBytes = await pdfDoc.save();
         const pdfPath = path.join(mergedDir, 'merged.pdf');
         fs.writeFileSync(pdfPath, pdfBytes);
-        if (onProgress) onProgress(`[auto-flip] ✅ PDF Generation Complete! Saved merged.pdf!`, results.length, maxPages);
+
+        await pres.writeFile({ fileName: path.join(mergedDir, 'merged.pptx') });
+
+        const docxObj = new Document({ sections: [{ properties: {}, children: docxChildren }] });
+        const docxBytes = await Packer.toBuffer(docxObj);
+        fs.writeFileSync(path.join(mergedDir, 'merged.docx'), docxBytes);
+
+        if (onProgress) onProgress(`[auto-flip] ✅ Compilation Complete! Saved merged.pdf, merged.pptx, and merged.docx!`, results.length, maxPages);
       } catch (e: any) {
-        if (onProgress) onProgress(`[auto-flip] ⚠️ Failed to generate PDF: ${e.message}`, results.length, maxPages);
+        if (onProgress) onProgress(`[auto-flip] ⚠️ Failed to generate documents: ${e.message}`, results.length, maxPages);
       }
     }
 
