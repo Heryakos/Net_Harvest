@@ -272,6 +272,7 @@ export default function App() {
   };
 
   const handleImgClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (imgRef.current) imgRef.current.focus();
     const rect = e.currentTarget.getBoundingClientRect();
     
     // Playwright viewport is 1280x720
